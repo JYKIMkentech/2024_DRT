@@ -19,7 +19,7 @@ function [gamma_lower, gamma_upper, gamma_resample_all] = bootstrap_uncertainty(
     %   gamma_resample_all - All resampled gamma estimates
 
     % Original gamma estimate
-    [gamma_original, ~, theta_discrete, tau_discrete, ~] = DRT_estimation(t, ik, V_sd, lambda, n, dt, dur, OCV, R0);
+    [~, ~, theta_discrete, tau_discrete, ~] = DRT_estimation(t, ik, V_sd, lambda, n, dt, dur, OCV, R0);
     delta_theta = theta_discrete(2) - theta_discrete(1);
 
     % Regularization matrix L (first-order difference)
@@ -90,10 +90,14 @@ function [gamma_lower, gamma_upper, gamma_resample_all] = bootstrap_uncertainty(
     end
 
     % Calculate percentiles (5% and 95%)
-    gamma_resample_percentiles = prctile(gamma_resample_all - gamma_original', [5 95]);
-    %gamma_resample_percentiles = prctile(gamma_resample_all, [5 95]);
+    %gamma_resample_percentiles = prctile(gamma_resample_all - gamma_original', [5 95]);
+    gamma_resample_percentiles = prctile(gamma_resample_all, [5 95]);
 
     % Uncertainty bounds
-    gamma_lower = gamma_original' + gamma_resample_percentiles(1, :);
-    gamma_upper = gamma_original' + gamma_resample_percentiles(2, :);
-end
+    %gamma_lower = gamma_original' + gamma_resample_percentiles(1, :);
+    %gamma_upper = gamma_original' + gamma_resample_percentiles(2, :);
+
+     % 불확실성 경계 설정
+    gamma_lower = gamma_resample_percentiles(1, :);
+    gamma_upper = gamma_resample_percentiles(2, :);
+end 

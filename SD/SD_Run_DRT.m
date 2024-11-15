@@ -93,7 +93,7 @@ gamma_lower_all = cell(num_scenarios, 1);
 gamma_upper_all = cell(num_scenarios, 1);
 
 % Variables to store uncertainty estimation results
-num_resamples = 200;  % Number of bootstrap resamples
+num_resamples = 1000;  % Number of bootstrap resamples
 gamma_resample_all_scenarios = cell(num_scenarios, 1);
 
 % Loop over scenarios
