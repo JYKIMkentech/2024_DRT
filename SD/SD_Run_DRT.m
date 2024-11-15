@@ -115,7 +115,7 @@ for s = 1:num_scenarios
 
     % Store results
     gamma_est_all{s} = gamma_est';
-    V_est_all{s} = V_est';
+    %V_est_all{s} = V_est';
     V_sd_all{s} = V_sd';
     theta_discrete_all{s} = theta_discrete;
 

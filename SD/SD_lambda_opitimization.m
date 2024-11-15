@@ -1,7 +1,7 @@
 clc; clear; close all;
 
 %% 설정
-lambda_values = logspace(-4, 9, 5);
+lambda_values = logspace(-4, 9, 20);
 tau_min = 0.1;
 
 
@@ -133,8 +133,7 @@ function [gamma_estimated, theta_discrete] = estimate_gamma(lambda, train_scenar
         V_sd = scenario_data.V(:);
         dt = scenario_data.dt;
         n = scenario_data.n;
-        tau_max = scenario_data.dur;
-        dur = tau_max;
+        dur = scenario_data.dur;
         [~, ~, theta_discrete, ~, W] = DRT_estimation(t, ik, V_sd, lambda, n, dt, dur, OCV, R0);
         y_adjusted = V_sd - OCV - R0 * ik;
         W_total = [W_total; W];
@@ -161,13 +160,9 @@ function error_total = calculate_error(gamma_estimated, val_scenarios, type_data
     for s = val_scenarios
         idx = find([type_data.SN] == s, 1);
         scenario_data = type_data(idx);
-        t = scenario_data.t(:);
         ik = scenario_data.I(:);
         V_actual = scenario_data.V(:);
         dt = scenario_data.dt;
-        n = scenario_data.n;
-        tau_max = scenario_data.dur;
-        dur = tau_max;
         tau_discrete = exp(theta_discrete);
         delta_theta = theta_discrete(2) - theta_discrete(1);
         % W 계산

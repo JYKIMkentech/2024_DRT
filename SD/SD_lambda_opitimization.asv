@@ -140,8 +140,15 @@ function [gamma_estimated, theta_discrete] = estimate_gamma(lambda, train_scenar
         W_total = [W_total; W];
         y_total = [y_total; y_adjusted];
     end
-    % 전체 데이터에 대해 gamma 추정
-    L = diff(eye(size(W_total, 2)));
+       % 전체 데이터에 대해 gamma 추정
+    n_gamma = size(W_total, 2); % gamma의 개수 (W_total의 열 수)
+    
+    % Regularization matrix L (first-order difference)
+    L = zeros(n_gamma - 1, n_gamma);
+    for i = 1:(n_gamma - 1)
+        L(i, i) = -1;
+        L(i, i + 1) = 1;
+    end
     H = 2 * (W_total' * W_total + lambda * (L' * L));
     f = -2 * W_total' * y_total;
     options = optimoptions('quadprog', 'Display', 'off');
@@ -154,13 +161,13 @@ function error_total = calculate_error(gamma_estimated, val_scenarios, type_data
     for s = val_scenarios
         idx = find([type_data.SN] == s, 1);
         scenario_data = type_data(idx);
-        t = scenario_data.t(:);
+        %t = scenario_data.t(:);
         ik = scenario_data.I(:);
         V_actual = scenario_data.V(:);
         dt = scenario_data.dt;
-        n = scenario_data.n;
-        tau_max = scenario_data.dur;
-        dur = tau_max;
+        %n = scenario_data.n;
+        %tau_max = scenario_data.dur;
+        %dur = tau_max;
         tau_discrete = exp(theta_discrete);
         delta_theta = theta_discrete(2) - theta_discrete(1);
         % W 계산
