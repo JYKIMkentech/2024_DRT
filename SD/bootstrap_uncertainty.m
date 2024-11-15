@@ -91,6 +91,7 @@ function [gamma_lower, gamma_upper, gamma_resample_all] = bootstrap_uncertainty(
 
     % Calculate percentiles (5% and 95%)
     gamma_resample_percentiles = prctile(gamma_resample_all - gamma_original', [5 95]);
+    %gamma_resample_percentiles = prctile(gamma_resample_all, [5 95]);
 
     % Uncertainty bounds
     gamma_lower = gamma_original' + gamma_resample_percentiles(1, :);

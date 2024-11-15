@@ -18,7 +18,8 @@ labelFontSize = 12;
 %% Load data
 
 % Set the file path to the directory containing the .mat files
-file_path = 'G:\공유 드라이브\Battery Software Lab\Projects\DRT\SD_new\';
+%file_path = 'G:\공유 드라이브\Battery Software Lab\Projects\DRT\SD_new\';
+file_path = 'G:\공유 드라이브\Battery Software Lab\Projects\DRT\SD_lambda\';
 
 % Get list of .mat files in the directory
 mat_files = dir(fullfile(file_path, '*.mat')); % AS1_1per_new, AS1_2per_new, AS2_1per_new, AS2_2per_new, Unimodal_gamma, Bimodal_gamma
@@ -104,7 +105,7 @@ for s = 1:num_scenarios
     t = scenario_data.t;          % Time vector
     ik = scenario_data.I;         % Current vector
     V_sd = scenario_data.V;       % Measured voltage vector
-    lambda_hat = 0.518;           % Regularization parameter (modify if available in data)
+    lambda_hat = 50; %scenario_data.Lambda_hat;           % Regularization parameter (modify if available in data)
     n = scenario_data.n;          % Number of RC elements
     dt = scenario_data.dt;        % Sampling time
     dur = scenario_data.dur;      % Duration (tau_max)

@@ -140,15 +140,8 @@ function [gamma_estimated, theta_discrete] = estimate_gamma(lambda, train_scenar
         W_total = [W_total; W];
         y_total = [y_total; y_adjusted];
     end
-       % 전체 데이터에 대해 gamma 추정
-    n_gamma = size(W_total, 2); % gamma의 개수 (W_total의 열 수)
-    
-    % Regularization matrix L (first-order difference)
-    L = zeros(n_gamma - 1, n_gamma);
-    for i = 1:(n_gamma - 1)
-        L(i, i) = -1;
-        L(i, i + 1) = 1;
-    end
+    % 전체 데이터에 대해 gamma 추정
+    L = diff(eye(size(W_total, 2)));
     H = 2 * (W_total' * W_total + lambda * (L' * L));
     f = -2 * W_total' * y_total;
     options = optimoptions('quadprog', 'Display', 'off');
