@@ -64,13 +64,11 @@ function [gamma_lower, gamma_upper, gamma_resample_all] = bootstrap_uncertainty(
         for k_idx = 1:length(t_resampled_sorted)
             if k_idx == 1
                 for i = 1:n
-                    W_resampled(k_idx, i) = ik_resampled_sorted(k_idx) * ...
-                        (1 - exp(-dt_resampled(k_idx) / tau_discrete(i))) * delta_theta;
+                    W_resampled(k_idx, i) = ik_resampled_sorted(k_idx) * (1 - exp(-dt_resampled(k_idx) / tau_discrete(i))) * delta_theta;
                 end
             else
                 for i = 1:n
-                    W_resampled(k_idx, i) = W_resampled(k_idx-1, i) * exp(-dt_resampled(k_idx) / tau_discrete(i)) + ...
-                        ik_resampled_sorted(k_idx) * (1 - exp(-dt_resampled(k_idx) / tau_discrete(i))) * delta_theta;
+                    W_resampled(k_idx, i) = W_resampled(k_idx-1, i) * exp(-dt_resampled(k_idx) / tau_discrete(i)) + ik_resampled_sorted(k_idx) * (1 - exp(-dt_resampled(k_idx) / tau_discrete(i))) * delta_theta;
                 end
             end
         end

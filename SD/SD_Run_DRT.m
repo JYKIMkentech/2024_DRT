@@ -149,6 +149,7 @@ ylabel('\gamma', 'FontSize', labelFontSize);
 title([AS_name, ' Type ', selected_type, ': Estimated \gamma with Uncertainty'], 'FontSize', titleFontSize);
 set(gca, 'FontSize', axisFontSize);
 legend('Location', 'Best', 'FontSize', legendFontSize);
+ylim([0 inf])
 
 % Optionally plot selected scenarios
 disp('Available scenario numbers:');
@@ -179,6 +180,7 @@ ylabel('\gamma', 'FontSize', labelFontSize);
 title([AS_name, ' Type ', selected_type, ': Estimated \gamma with Uncertainty for Selected Scenarios'], 'FontSize', titleFontSize);
 set(gca, 'FontSize', axisFontSize);
 legend('Location', 'Best', 'FontSize', legendFontSize);
+ylim([0 inf])
 
 % Individual scenario plots
 figure('Name', [AS_name, ' Type ', selected_type, ': Individual Scenario DRTs'], 'NumberTitle', 'off');
@@ -201,5 +203,5 @@ for s = 1:num_scenarios
     ylabel('\gamma', 'FontSize', labelFontSize);
     title(['Scenario ', num2str(SN_list(s))], 'FontSize', titleFontSize);
     set(gca, 'FontSize', axisFontSize);
-    grid on;
+    ylim([0 inf])
 end

@@ -8,7 +8,8 @@ tau_min = 0.1;
 
 %% 데이터 로드
 save_path = 'G:\공유 드라이브\Battery Software Lab\Projects\DRT\SD_lambda\';
-file_path = 'G:\공유 드라이브\Battery Software Lab\Projects\DRT\SD_new\';
+%file_path = 'G:\공유 드라이브\Battery Software Lab\Projects\DRT\SD_new\';
+file_path = 'G:\공유 드라이브\Battery Software Lab\Projects\DRT\SD_lambda\';
 mat_files = dir(fullfile(file_path, '*.mat'));
 if isempty(mat_files)
     error('데이터 파일이 존재하지 않습니다. 경로를 확인해주세요.');
@@ -89,6 +90,7 @@ end
 [~, min_idx] = min(cve_lambda);
 optimal_lambda = lambda_values(min_idx);
 
+
 %% 결과 저장
 for i = 1:length(type_data)
     type_data(i).Lambda_vec = lambda_values;
@@ -108,6 +110,7 @@ title('로그 스케일 \lambda 에 따른 CVE 그래프');
 grid on;
 legend({'CVE', ['최적 \lambda = ', num2str(optimal_lambda, '%.2e')]}, 'Location', 'best');
 hold off;
+ylim([29.80 29.807])
 
 %% 데이터 저장
 
