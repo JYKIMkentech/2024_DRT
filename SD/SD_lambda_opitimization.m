@@ -1,7 +1,7 @@
 clc; clear; close all;
 
 %% 설정
-lambda_values = logspace(-4, 9, 20);
+lambda_values = logspace(-4, 3, 50);
 tau_min = 0.1;
 
 

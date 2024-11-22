@@ -7,7 +7,7 @@ function [gamma_est, V_est, theta_discrete, tau_discrete, W] = DRT_estimation(t,
     %   V_sd        - Measured voltage vector
     %   lambda_hat  - Regularization parameter
     %   n           - Number of RC elements
-    %   dt          - Sampling time
+    %   dt          - Sampling time (scalar or vector)
     %   dur         - Duration (tau_max)
     %   OCV         - Open Circuit Voltage
     %   R0          - Initial resistance
@@ -18,6 +18,14 @@ function [gamma_est, V_est, theta_discrete, tau_discrete, W] = DRT_estimation(t,
     %   theta_discrete  - Discrete theta values
     %   tau_discrete    - Discrete tau values
     %   W               - Matrix used in estimation
+
+    % Check if dt is scalar or vector
+    if isscalar(dt)
+        % If dt is scalar, create a vector of the same length as t
+        dt = repmat(dt, length(t), 1);
+    elseif length(dt) ~= length(t)
+        error('Length of dt must be equal to length of t if dt is a vector.');
+    end
 
     % Define theta_discrete and tau_discrete based on dur and n
     tau_min = 0.1;  % Minimum tau value in seconds
@@ -33,12 +41,12 @@ function [gamma_est, V_est, theta_discrete, tau_discrete, W] = DRT_estimation(t,
     for k_idx = 1:length(t)
         if k_idx == 1
             for i = 1:n
-                W(k_idx, i) = ik(k_idx) * (1 - exp(-dt / tau_discrete(i))) * delta_theta;
+                W(k_idx, i) = ik(k_idx) * (1 - exp(-dt(k_idx) / tau_discrete(i))) * delta_theta;
             end
         else
             for i = 1:n
-                W(k_idx, i) = W(k_idx-1, i) * exp(-dt / tau_discrete(i)) + ...
-                              ik(k_idx) * (1 - exp(-dt / tau_discrete(i))) * delta_theta;
+                W(k_idx, i) = W(k_idx-1, i) * exp(-dt(k_idx) / tau_discrete(i)) + ...
+                              ik(k_idx) * (1 - exp(-dt(k_idx) / tau_discrete(i))) * delta_theta;
             end
         end
     end
