@@ -1,4 +1,4 @@
-function [gamma_est, V_est, theta_discrete, tau_discrete, W] = DRT_estimation(t, ik, V_sd, lambda_hat, n, dt, dur, OCV, R0)
+function [gamma_est, V_est, theta_discrete, tau_discrete, W, y] = DRT_estimation(t, ik, V_sd, lambda, n, dt, dur, OCV, R0)
     % DRT_estimation estimates the gamma function and voltage using DRT.
     %
     % Inputs:
@@ -52,7 +52,7 @@ function [gamma_est, V_est, theta_discrete, tau_discrete, W] = DRT_estimation(t,
     end
 
     % Adjust y (measured voltage)
-    y_adjusted = V_sd - OCV - R0 * ik;
+    y = V_sd - OCV - R0 * ik;
 
     % Regularization matrix L (first-order difference)
     L = zeros(n-1, n);
@@ -62,8 +62,8 @@ function [gamma_est, V_est, theta_discrete, tau_discrete, W] = DRT_estimation(t,
     end
 
     % Set up the quadratic programming problem
-    H = 2 * (W' * W + lambda_hat * (L' * L));
-    f = -2 * W' * y_adjusted;
+    H = 2 * (W' * W + lambda * (L' * L));
+    f = -2 * W' * y;
 
     % Inequality constraints: gamma >= 0
     A_ineq = -eye(n);
