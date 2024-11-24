@@ -23,9 +23,8 @@ ocv_values = soc_ocv(:, 2);  % OCV 값
 
 n = 201;
 dur = 1370; % [sec]
-SOC_begin = 0.9907 ; % 0.9901;
-%soc_begin = interp1(ocv_values, soc_values, udds_data(1).V(1), 'linear', 'extrap');
-Q_batt = 2.93; % [Ah]
+SOC_begin = 0.9907; % 초기 SOC 값
+Q_batt = 2.7742; % [Ah]
 
 %% 3. 각 trip에 대한 DRT 추정 (Quadprog 사용)
 
@@ -35,21 +34,23 @@ num_trips = length(udds_data);
 gamma_est_all = zeros(num_trips, n);  % 모든 트립에 대해
 R0_est_all = zeros(num_trips, 1);
 V_est_all = cell(num_trips, 1); % 추정된 전압 저장을 위한 셀 배열
-SOC_all = cell(num_trips, 1);   % 각 트립의 SOC 저장을 위한 셀 배열
+SOC_all = cell(num_trips, 1);   
+SOC_mid_all = zeros(num_trips,1);
 
-for s = 1:num_trips
+for s = 1:num_trips-1
     fprintf('Processing Trip %d/%d...\n', s, num_trips);
     
     % DRT_estimation_aug input 
     t = udds_data(s).t;    % 시간 벡터 [초]
     I = udds_data(s).I;    % 전류 벡터 [A]
     V = udds_data(s).V;    % 전압 벡터 [V]
-    lambda_hat = 6e-4;      % 정규화 파라미터
+    lambda_hat = 3.59e-4;      % 정규화 파라미터
     dt = [t(1); diff(t)];  % 첫 번째 dt는 t(1)으로 설정
-    SOC = SOC_begin + cumtrapz(t, I) / (Q_batt * 3600); % 분자 : A * s / 분모 : A * s 
+    SOC = SOC_begin + cumtrapz(t, I) / (Q_batt * 3600); % SOC 계산
     SOC_all{s} = SOC;  % SOC 저장 (셀 배열 사용)
-    
-    % DRT_estimation_aug 함수 호출
+    SOC_mid_all(s) = mean(SOC);
+
+    % DRT_estimation_aug 함수 호출 (함수 구현이 필요합니다)
     [gamma_est, R0_est, V_est , theta_discrete , W, ~, ~] = DRT_estimation_aug(t, I, V, lambda_hat, n, dt, dur, SOC, soc_values, ocv_values);
     
     % 결과 저장
@@ -59,35 +60,119 @@ for s = 1:num_trips
     
     % SOC 업데이트 
     SOC_begin = SOC(end);
-end
 
-%% Plot
+    %% 각 Trip에 대해 Figure 생성
+    figure('Name', ['Trip ', num2str(s)], 'NumberTitle', 'off');
+    set(gcf, 'Position', [150, 150, 1200, 800]);  % Figure 크기 조정
 
-for s = 1:num_trips-15  
-    figure;
+    % 첫 번째 subplot: Voltage, Estimated Voltage, Current
+    subplot(2,1,1);
     
-    % True Voltage 플롯
-    plot(udds_data(s).t, udds_data(s).V, 'Color', c_mat(1, :), 'LineWidth', 1.5);
+    % 왼쪽 Y축: Voltage
+    yyaxis left
+    plot(t, V, 'Color', c_mat(1, :), 'LineWidth', 1.5, 'DisplayName', 'Measured Voltage');
     hold on;
-    
-    % Estimated Voltage 플롯
-    plot(udds_data(s).t, V_est_all{s}, '--', 'Color', c_mat(2, :), 'LineWidth', 1.5);
-    
-    % Current 플롯 추가 (필요 시 주석 해제)
-    %plot(udds_data(s).t, udds_data(s).I, '-', 'Color', c_mat(3, :), 'LineWidth', 1.5);
-    
+    plot(t, V_est, '--', 'Color', c_mat(2, :), 'LineWidth', 1.5, 'DisplayName', 'Estimated Voltage');
+    ylabel('Voltage [V]', 'FontSize', labelFontSize, 'Color', c_mat(1, :));
+    set(gca, 'YColor', c_mat(1, :));  % 왼쪽 Y축 색상 설정
+
+    % 오른쪽 Y축: Current
+    yyaxis right
+    plot(t, I, '-', 'Color', c_mat(3, :), 'LineWidth', 1.5, 'DisplayName', 'Current');
+    ylabel('Current [A]', 'FontSize', labelFontSize, 'Color', c_mat(3, :));
+    set(gca, 'YColor', c_mat(3, :));  % 오른쪽 Y축 색상 설정
+
     xlabel('Time [s]', 'FontSize', labelFontSize);
-    ylabel('Voltage [V]', 'FontSize', labelFontSize);
-    title(sprintf('True vs Estimated Voltage for Trip %d', s), 'FontSize', titleFontSize);
-    
-    % 범례 설정
-    legend_entries = {'True Voltage', 'Estimated Voltage'};
-    legend(legend_entries, 'FontSize', legendFontSize);
-    
+    title(sprintf('Trip %d: Voltage and Current', s), 'FontSize', titleFontSize);
+    grid on;
+    legend('FontSize', legendFontSize);
+    set(gca, 'FontSize', axisFontSize);
+    hold off;
+
+    % 두 번째 subplot: DRT (theta vs gamma)
+    subplot(2,1,2);
+    plot(theta_discrete', gamma_est, '-', 'Color', c_mat(1, :) , 'LineWidth', 1.5);
+    xlabel('\theta = ln(\tau)','FontSize', labelFontSize)
+    ylabel('\gamma [\Omega]', 'FontSize', labelFontSize);
+    title(sprintf('Trip %d: DRT', s), 'FontSize', titleFontSize);
     grid on;
     set(gca, 'FontSize', axisFontSize);
-    
-    % 각 트립의 R0 추정값 출력 (필요 시 주석 해제)
-    % fprintf('Estimated R0 for Trip %d: %.4f Ohm\n', s, R0_est_all(s));
+    hold on;
+
+    % R0 값을 그림 내부에 표시 (과학적 표기법 사용)
+    str_R0 = sprintf('R0 = %.1e ', R0_est_all(s));  % $...$로 감싸기
+    x_limits = xlim;
+    y_limits = ylim;
+    text_position_x = x_limits(1) + 0.05 * (x_limits(2) - x_limits(1));
+    text_position_y = y_limits(2) - 0.05 * (y_limits(2) - y_limits(1));
+    text(text_position_x, text_position_y, str_R0, 'FontSize', labelFontSize, 'Interpreter', 'latex');
+    hold off;
 end
+
+
+%% Plot 3D DRT
+
+% SOC_mid_all을 색상 매핑을 위해 정규화
+soc_min = min(SOC_mid_all);
+soc_max = max(SOC_mid_all);
+soc_normalized = (SOC_mid_all - soc_min) / (soc_max - soc_min);
+
+% 사용할 컬러맵 선택
+colormap_choice = jet;  % 원하는 다른 컬러맵으로 변경 가능
+num_colors = size(colormap_choice, 1);
+% SOC_mid_all을 기반으로 색상 매핑
+colors = interp1(linspace(0, 1, num_colors), colormap_choice, soc_normalized);
+
+figure;
+hold on;
+
+% 각 트립별로 gamma 추정값을 3D 선으로 플롯
+for s = 1:num_trips-1
+    % x좌표: SOC_mid_all(s), theta_values에 맞게 반복
+    x = SOC_mid_all(s) * ones(size(theta_discrete(:)));
+    % y좌표: theta_values
+    y = theta_discrete(:);
+    % z좌표: gamma_est_all(s, :)
+    z = gamma_est_all(s, :)';
+    % 3D 선 플롯, 색상은 SOC_mid_all에 따라 매핑
+    plot3(x, y, z, 'Color', colors(s, :), 'LineWidth', 1.5);
+end
+
+xlabel('SOC', 'FontSize', labelFontSize);
+ylabel('\theta = ln(\tau)', 'FontSize', labelFontSize);
+zlabel('\gamma [\Omega]', 'FontSize', labelFontSize);
+title('Gamma Estimates vs. \theta and SOC', 'FontSize', titleFontSize);
+grid on;
+zlim([0, 1.5]);
+set(gca, 'FontSize', axisFontSize);
+view(135, 30);  % 시각화 각도 조정
+hold off;
+
+
+colormap(colormap_choice);
+c = colorbar;
+c.Label.String = 'SOC';
+c.Label.FontSize = labelFontSize;
+c.Ticks = linspace(0, 1, 5);  % 원하는 개수로 조정 가능
+c.TickLabels = arrayfun(@(x) sprintf('%.3f', x), linspace(soc_min, soc_max, 5), 'UniformOutput', false);
+
+
+%% save
+
+save('gamma_est_all.mat', 'gamma_est_all');
+save('R0_est_all.mat', 'R0_est_all');
+save('udds_data.mat', 'udds_data');
+
+
+
+
+
+
+
+
+
+
+
+
+
 

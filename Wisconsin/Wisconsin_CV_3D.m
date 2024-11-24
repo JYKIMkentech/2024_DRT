@@ -25,11 +25,11 @@ n = 201;
 dur = 1370; % [초]
 SOC_begin = 0.9907; % 초기 SOC
 
-lambda_grids = logspace(-5, 2, 2);  
+lambda_grids = logspace(-10, -1, 10);  
 num_lambdas = length(lambda_grids);
 
 % Q_batt 그리드 설정
-Q_batt_grids = linspace(2.7, 3.1, 2); % [Ah]
+Q_batt_grids = [2.77 ,2.79,2.81, 2.83];%linspace(2.7, 3.1, 20); % [Ah]
 num_Q_batt = length(Q_batt_grids);
 
 %% 3. Cross-Validation 루프

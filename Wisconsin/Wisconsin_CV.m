@@ -24,9 +24,9 @@ ocv_values = soc_ocv(:, 2);  % OCV 값
 n = 201;
 dur = 1370; % [sec]
 SOC_begin = 0.9907 ; % 0.9907;
-Q_batt = 2.93; % [Ah]
+Q_batt = 2.7742; % [Ah]
 
-lambda_grids = logspace(-5, 2, 10);  
+lambda_grids = logspace(-7, 1, 10);  
 num_lambdas = length(lambda_grids);
 
 %% 3. 전체 trip에 대해 SOC 계산 --> OCV update 할때 필요
@@ -56,7 +56,7 @@ for m = 1 : num_lambdas  % 모든 lamda에 대해서 loop
 
         W_total = [];
         y_total = [];
- 
+        f
         for s = train_trips % 검증/학습 데이터 셋이 정해지면 1개 folds에 대해, W_total, y_total 계산 
             t = udds_data(s).t;
             dt = [t(1); diff(t)];
@@ -79,7 +79,7 @@ for m = 1 : num_lambdas  % 모든 lamda에 대해서 loop
             I = udds_data(j).I;
             V = udds_data(j).V;
             SOC = udds_data(j).SOC; 
-            j
+            
             [~, ~, ~, ~, W_val, ~, OCV] = DRT_estimation_aug(t, I, V, lambda, n, dt, dur, SOC, soc_values, ocv_values);
             V_est = OCV + W_val * [gamma_total; R0_total];
 
@@ -106,8 +106,8 @@ semilogx(optimal_lambda, CVE_total(optimal_idx), 'ro', 'MarkerSize', 10, 'LineWi
 xlabel('\lambda', 'FontSize', labelFontSize);
 ylabel('CVE', 'FontSize', labelFontSize);
 title('CVE vs \lambda ', 'FontSize', titleFontSize);
-grid on;
 legend({'CVE', ['Optimal \lambda = ', num2str(optimal_lambda, '%.2e')]}, 'Location', 'best');
+%ylim([649.1 649.2])
 hold off;
 
 
