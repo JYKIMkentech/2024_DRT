@@ -50,10 +50,8 @@ for s = 1:num_trips-1
     SOC_all{s} = SOC;  % SOC 저장 (셀 배열 사용)
     SOC_mid_all(s) = mean(SOC);
 
-    % DRT_estimation_aug 함수 호출 (함수 구현이 필요합니다)
     [gamma_est, R0_est, V_est , theta_discrete , W, ~, ~] = DRT_estimation_aug(t, I, V, lambda_hat, n, dt, dur, SOC, soc_values, ocv_values);
     
-    % 결과 저장
     gamma_est_all(s, :) = gamma_est';
     R0_est_all(s) = R0_est;
     V_est_all{s} = V_est;  % 셀 배열에 저장
@@ -70,37 +68,35 @@ for s = 1:num_trips-1
     
     % 왼쪽 Y축: Voltage
     yyaxis left
-    plot(t, V, 'Color', c_mat(1, :), 'LineWidth', 1.5, 'DisplayName', 'Measured Voltage');
+    plot(t, V, 'Color', c_mat(1, :), 'LineWidth', 3, 'DisplayName', 'Measured Voltage');
     hold on;
-    plot(t, V_est, '--', 'Color', c_mat(2, :), 'LineWidth', 1.5, 'DisplayName', 'Estimated Voltage');
+    plot(t, V_est, '--', 'Color', c_mat(2, :), 'LineWidth', 3, 'DisplayName', 'Estimated Voltage');
     ylabel('Voltage [V]', 'FontSize', labelFontSize, 'Color', c_mat(1, :));
     set(gca, 'YColor', c_mat(1, :));  % 왼쪽 Y축 색상 설정
 
     % 오른쪽 Y축: Current
     yyaxis right
-    plot(t, I, '-', 'Color', c_mat(3, :), 'LineWidth', 1.5, 'DisplayName', 'Current');
+    plot(t, I, '-', 'Color', c_mat(3, :), 'LineWidth', 3, 'DisplayName', 'Current');
     ylabel('Current [A]', 'FontSize', labelFontSize, 'Color', c_mat(3, :));
     set(gca, 'YColor', c_mat(3, :));  % 오른쪽 Y축 색상 설정
 
     xlabel('Time [s]', 'FontSize', labelFontSize);
     title(sprintf('Trip %d: Voltage and Current', s), 'FontSize', titleFontSize);
-    grid on;
     legend('FontSize', legendFontSize);
     set(gca, 'FontSize', axisFontSize);
     hold off;
 
     % 두 번째 subplot: DRT (theta vs gamma)
     subplot(2,1,2);
-    plot(theta_discrete', gamma_est, '-', 'Color', c_mat(1, :) , 'LineWidth', 1.5);
-    xlabel('\theta = ln(\tau)','FontSize', labelFontSize)
+    plot(theta_discrete', gamma_est, '-', 'Color', c_mat(1, :) , 'LineWidth', 3);
+    xlabel('\theta = ln(\tau [s])','FontSize', labelFontSize)
     ylabel('\gamma [\Omega]', 'FontSize', labelFontSize);
     title(sprintf('Trip %d: DRT', s), 'FontSize', titleFontSize);
-    grid on;
     set(gca, 'FontSize', axisFontSize);
     hold on;
 
-    % R0 값을 그림 내부에 표시 (과학적 표기법 사용)
-    str_R0 = sprintf('R0 = %.1e ', R0_est_all(s));  % $...$로 감싸기
+    % R0 값을 그림 내부에 표시 
+    str_R0 = sprintf('$R_0 = %.1e\\ \\Omega$', R0_est_all(s));
     x_limits = xlim;
     y_limits = ylim;
     text_position_x = x_limits(1) + 0.05 * (x_limits(2) - x_limits(1));
@@ -120,7 +116,6 @@ soc_normalized = (SOC_mid_all - soc_min) / (soc_max - soc_min);
 % 사용할 컬러맵 선택
 colormap_choice = jet;  % 원하는 다른 컬러맵으로 변경 가능
 num_colors = size(colormap_choice, 1);
-% SOC_mid_all을 기반으로 색상 매핑
 colors = interp1(linspace(0, 1, num_colors), colormap_choice, soc_normalized);
 
 figure;
@@ -128,18 +123,14 @@ hold on;
 
 % 각 트립별로 gamma 추정값을 3D 선으로 플롯
 for s = 1:num_trips-1
-    % x좌표: SOC_mid_all(s), theta_values에 맞게 반복
     x = SOC_mid_all(s) * ones(size(theta_discrete(:)));
-    % y좌표: theta_values
     y = theta_discrete(:);
-    % z좌표: gamma_est_all(s, :)
     z = gamma_est_all(s, :)';
-    % 3D 선 플롯, 색상은 SOC_mid_all에 따라 매핑
     plot3(x, y, z, 'Color', colors(s, :), 'LineWidth', 1.5);
 end
 
 xlabel('SOC', 'FontSize', labelFontSize);
-ylabel('\theta = ln(\tau)', 'FontSize', labelFontSize);
+ylabel('\theta = ln(\tau [s])', 'FontSize', labelFontSize);
 zlabel('\gamma [\Omega]', 'FontSize', labelFontSize);
 title('Gamma Estimates vs. \theta and SOC', 'FontSize', titleFontSize);
 grid on;
@@ -153,7 +144,7 @@ colormap(colormap_choice);
 c = colorbar;
 c.Label.String = 'SOC';
 c.Label.FontSize = labelFontSize;
-c.Ticks = linspace(0, 1, 5);  % 원하는 개수로 조정 가능
+c.Ticks = linspace(0, 1, 5);  
 c.TickLabels = arrayfun(@(x) sprintf('%.3f', x), linspace(soc_min, soc_max, 5), 'UniformOutput', false);
 
 
