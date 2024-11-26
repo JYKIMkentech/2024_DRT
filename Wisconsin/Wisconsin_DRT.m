@@ -44,7 +44,7 @@ for s = 1:num_trips-1
     t = udds_data(s).t;    % 시간 벡터 [초]
     I = udds_data(s).I;    % 전류 벡터 [A]
     V = udds_data(s).V;    % 전압 벡터 [V]
-    lambda_hat = 3.59e-4;      % 정규화 파라미터
+    lambda_hat = 3.79e-10;      % 정규화 파라미터
     dt = [t(1); diff(t)];  % 첫 번째 dt는 t(1)으로 설정
     SOC = SOC_begin + cumtrapz(t, I) / (Q_batt * 3600); % SOC 계산
     SOC_all{s} = SOC;  % SOC 저장 (셀 배열 사용)
@@ -150,7 +150,9 @@ c.TickLabels = arrayfun(@(x) sprintf('%.3f', x), linspace(soc_min, soc_max, 5), 
 
 %% save
 
-save('gamma_est_all.mat', 'gamma_est_all');
+save('gamma_est_all.mat', 'gamma_est_all', 'SOC_mid_all');
+
+save('theta_discrete.mat' , 'theta_discrete' );
 save('R0_est_all.mat', 'R0_est_all');
 save('udds_data.mat', 'udds_data');
 
