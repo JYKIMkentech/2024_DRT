@@ -222,7 +222,7 @@ for case_idx = 1:length(struct_cases)
         hold off;
     end
     
-    sgtitle(figure_names{case_idx}, 'FontSize', 16);
+    %sgtitle(figure_names{case_idx}, 'FontSize', 16);
 end
 
 
