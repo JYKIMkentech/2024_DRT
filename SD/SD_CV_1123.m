@@ -6,7 +6,7 @@ titleFontSize = 12;
 legendFontSize = 12;
 labelFontSize = 12;
 
-lambda_grids = logspace(-4, 3, 50);
+lambda_grids = logspace(-4, 3, 30);
 num_lambdas = length(lambda_grids);
 OCV = 0;
 R0 = 0.1;
