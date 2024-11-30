@@ -186,8 +186,8 @@ end
 %% Plot current and voltage
 
 % Define figure names for each case
-figure_names = {'AS1 Unimodal with 1% Noise', 'AS1 Unimodal with 2% Noise', ...
-                'AS2 Bimodal with 1% Noise', 'AS2 Bimodal with 2% Noise'};
+figure_names = {'AS1 1per', 'AS1 2per', ...
+                'AS2 1per', 'AS2 2per'};
             
 % Define the structures corresponding to each case
 struct_cases = {AS1_1per, AS1_2per, AS2_1per, AS2_2per};
@@ -222,7 +222,7 @@ for case_idx = 1:length(struct_cases)
         hold off;
     end
     
-    %sgtitle(figure_names{case_idx}, 'FontSize', 16);
+    sgtitle(figure_names{case_idx}, 'FontSize', 16);
 end
 
 
@@ -235,14 +235,14 @@ Gamma_bimodal.gamma = gamma_discrete_true_bimodal';
 
 % Unimodal
 figure;
-plot(Gamma_unimodal.theta, Gamma_unimodal.gamma, 'b-', 'LineWidth', 1.5);
+plot(Gamma_unimodal.theta, Gamma_unimodal.gamma, 'k-', 'LineWidth', 1.5);
 xlabel('\theta');
 ylabel('\gamma');
 title('Unimodal \gamma vs \theta');
 
 % Bimodal
 figure;
-plot(Gamma_bimodal.theta, Gamma_bimodal.gamma, 'r-', 'LineWidth', 1.5);
+plot(Gamma_bimodal.theta, Gamma_bimodal.gamma, 'k-', 'LineWidth', 1.5);
 xlabel('\theta');
 ylabel('\gamma');
 title('Bimodal \gamma vs \theta');

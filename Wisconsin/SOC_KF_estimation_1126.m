@@ -168,7 +168,7 @@ hWait = waitbar(0, 'Processing trips...'); % Waitbar 생성
 c_mat = lines(9);  % Define a color matrix with 9 distinct colors
 
 try
-    for trip_num = 1:num_trips-16
+    for trip_num = 1:num_trips-15
         %% Waitbar 업데이트 (백분율 포함)
         percent = (trip_num / (num_trips-1)) * 100;
         waitbar(trip_num / (num_trips-1), hWait, sprintf('Processing trip %d of %d... (%.2f%%)', trip_num, num_trips-1, percent));
