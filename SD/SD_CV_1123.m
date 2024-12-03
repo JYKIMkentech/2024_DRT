@@ -162,7 +162,7 @@ ylabel('CVE', 'FontSize', labelFontSize);
 title('CVE vs \lambda ', 'FontSize', titleFontSize);
 grid on;
 legend({'CVE', ['Optimal \lambda = ', num2str(optimal_lambda, '%.2e')]}, 'Location', 'best');
-ylim([534.19912 534.19913])
+%ylim([534.19912 534.19913])
 
 hold off;
 
