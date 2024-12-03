@@ -6,7 +6,7 @@ titleFontSize = 12;
 legendFontSize = 12;
 labelFontSize = 12;
 
-lambda_grids = logspace(-4, 3, 30);
+lambda_grids = logspace(-4, 3, 50);
 num_lambdas = length(lambda_grids);
 OCV = 0;
 R0 = 0.1;
@@ -33,14 +33,14 @@ dataset_idx = input('데이터셋 번호를 입력하세요: ');
 if isempty(dataset_idx) || dataset_idx < 1 || dataset_idx > length(datasets)
     error('유효한 데이터셋 번호를 입력해주세요.');
 end
-selected_dataset_name = datasets{dataset_idx};
+selected_dataset_name = datasets{dataset_idx}; % 선택된 dataset 당 80개 (type 8개 x 시나리오 10개) 
 if ~exist(selected_dataset_name, 'var')
     error('선택한 데이터셋이 로드되지 않았습니다.');
 end
 selected_dataset = eval(selected_dataset_name);
 
 %% 타입 선택 및 데이터 준비
-types = unique({selected_dataset.type});
+types = unique({selected_dataset.type}); % A,B,C,..,H
 disp('타입을 선택하세요:');
 for i = 1:length(types)
     fprintf('%d. %s\n', i, types{i});
@@ -51,11 +51,11 @@ if isempty(type_idx) || type_idx < 1 || type_idx > length(types)
 end
 selected_type = types{type_idx};
 type_indices = strcmp({selected_dataset.type}, selected_type);
-type_data = selected_dataset(type_indices);
+type_data = selected_dataset(type_indices); % 80개 중 , 선택된 type에 해당하는 시나리오 10개 선택 (eg. type_data = 'AS1_1per_new', 'A' type인 10개 시나리오 선택됨)
 if isempty(type_data)
     error('선택한 타입에 해당하는 데이터가 없습니다.');
 end
-SN_list = [type_data.SN];
+SN_list = [type_data.SN]; % SN = 시나리오 넘버
 
 %% 새로운 필드 추가 
 new_fields = {'Lambda_vec', 'CVE', 'Lambda_hat'};
@@ -71,10 +71,10 @@ end
 
 
 %% 람다 최적화 및 교차 검증
-scenario_numbers = SN_list;
-validation_combinations = nchoosek(scenario_numbers, 2);
-num_folds = size(validation_combinations, 1);
-CVE_total = zeros(num_lambdas,1);
+scenario_numbers = SN_list; % 시나리오 넘버
+validation_combinations = nchoosek(scenario_numbers, 2); % 조합 가능 수 
+num_folds = size(validation_combinations, 1); % 10C2 = 45 folds
+CVE_total = zeros(num_lambdas,1); % 45개 folds 경우 수에 대하여 CVE을 모두 더함 = CVE_total
 
 for m = 1 : num_lambdas  % 모든 lamda에 대해서 loop
     lambda = lambda_grids(m);
@@ -140,7 +140,7 @@ for i = 1:length(type_data)
     type_data(i).Lambda_hat = optimal_lambda;
 end
 selected_dataset(type_indices) = type_data;
-assignin('base', selected_dataset_name, selected_dataset);
+%assignin('base', selected_dataset_name, selected_dataset);
 
 %% 데이터 저장
 
@@ -149,8 +149,8 @@ if ~exist(save_path, 'dir')
     mkdir(save_path);
 end
 % 선택된 데이터셋을 지정된 폴더에 저장
-save(fullfile(save_path, [selected_dataset_name, '.mat']), selected_dataset_name);
-fprintf('Updated dataset saved to %s\n', fullfile(save_path, [selected_dataset_name, '.mat']));
+%save(fullfile(save_path, [selected_dataset_name, '.mat']), selected_dataset_name);
+%fprintf('Updated dataset saved to %s\n', fullfile(save_path, [selected_dataset_name, '.mat']));
 
 %% 5. Plot (CVE vs lambda)
 
