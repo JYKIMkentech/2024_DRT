@@ -1,4 +1,4 @@
-function [gamma_est, V_est, theta_discrete, tau_discrete, W, y] = DRT_estimation(t, ik, V_sd, lambda, n, dt, dur, OCV, R0)
+function [gamma_est, V_est, theta_discrete, tau_discrete, W, y] = DRT_estimation(t, ik, V_sd, lambda, n, dt, ~, OCV, R0)
     % DRT_estimation estimates the gamma function and voltage using DRT.
     %
     % Inputs:
