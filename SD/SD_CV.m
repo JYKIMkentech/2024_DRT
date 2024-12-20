@@ -6,7 +6,7 @@ titleFontSize = 12;
 legendFontSize = 12;
 labelFontSize = 12;
 
-lambda_grids = logspace(-4, 2, 5);
+lambda_grids = logspace(-8, 3, 30);
 num_lambdas = length(lambda_grids);
 OCV = 0;
 R0 = 0.1;
@@ -140,7 +140,7 @@ for i = 1:length(type_data)
     type_data(i).Lambda_hat = optimal_lambda;
 end
 selected_dataset(type_indices) = type_data;
-%assignin('base', selected_dataset_name, selected_dataset);
+assignin('base', selected_dataset_name, selected_dataset);
 
 %% 데이터 저장
 
@@ -162,7 +162,7 @@ ylabel('CVE', 'FontSize', labelFontSize);
 title('CVE vs \lambda ', 'FontSize', titleFontSize);
 grid on;
 legend({'CVE', ['Optimal \lambda = ', num2str(optimal_lambda, '%.2e')]}, 'Location', 'best');
-%ylim([534.19912 534.19913])
+%ylim([1072.38 1072.39])
 
 hold off;
 

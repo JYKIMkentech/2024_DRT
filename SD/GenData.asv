@@ -44,8 +44,8 @@ end
 % Unimodal
 mu_theta_uni = log(10);
 sigma_theta_uni = 1.53 ; %1.536;
-theta_min_uni = log(0.1) ; %mu_theta_uni - 3*sigma_theta_uni;
-theta_max_uni = log(1000) ; %mu_theta_uni + 3*sigma_theta_uni;
+theta_min_uni = mu_theta_uni - 3*sigma_theta_uni;
+theta_max_uni = mu_theta_uni + 3*sigma_theta_uni;
 theta_discrete_uni = linspace(theta_min_uni, theta_max_uni, n);
 tau_discrete_uni = exp(theta_discrete_uni);
 delta_theta_uni = theta_discrete_uni(2) - theta_discrete_uni(1);
@@ -56,11 +56,11 @@ gamma_discrete_true_unimodal = gamma_discrete_true_unimodal / max(gamma_discrete
 % Bimodal
 
 % First peak
-mu_theta1 = log(5);
+mu_theta1 = log(10);
 sigma_theta1 = 1;
 
 % Second peak
-mu_theta2 = log(90);
+mu_theta2 = log(120);
 sigma_theta2 = 0.7;
 
 theta_min_bi = log(0.1) ; %min([mu_theta1, mu_theta2]) - 3 * max([sigma_theta1, sigma_theta2]);
@@ -291,14 +291,14 @@ sgtitle('AS2\_1per: Scenarios 6,7,8,9', 'FontSize', 16);
 
 %% Save
 
-% Save the current, voltage scenarios
-save(fullfile(save_path, 'AS1_1per.mat'), 'AS1_1per');
-save(fullfile(save_path, 'AS1_2per.mat'), 'AS1_2per');
-save(fullfile(save_path, 'AS2_1per.mat'), 'AS2_1per');
-save(fullfile(save_path, 'AS2_2per.mat'), 'AS2_2per');
-
-% Save the True Gamma vs theta
-save(fullfile(save_path, 'Gamma_unimodal.mat'), 'Gamma_unimodal');
-save(fullfile(save_path, 'Gamma_bimodal.mat'), 'Gamma_bimodal');
+% % Save the current, voltage scenarios
+% save(fullfile(save_path, 'AS1_1per.mat'), 'AS1_1per');
+% save(fullfile(save_path, 'AS1_2per.mat'), 'AS1_2per');
+% save(fullfile(save_path, 'AS2_1per.mat'), 'AS2_1per');
+% save(fullfile(save_path, 'AS2_2per.mat'), 'AS2_2per');
+% 
+% % Save the True Gamma vs theta
+% save(fullfile(save_path, 'Gamma_unimodal.mat'), 'Gamma_unimodal');
+% save(fullfile(save_path, 'Gamma_bimodal.mat'), 'Gamma_bimodal');
 
 

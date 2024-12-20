@@ -108,7 +108,7 @@ for s = 1:num_scenarios
     dt = scenario_data.dt;           % dt value
     dur = scenario_data.dur;         % Duration value
     n = scenario_data.n;             % Number of RC elements
-    lambda = 30 ;%scenario_data.Lambda_hat; % Modify if necessary
+    lambda = 0.1 ;%scenario_data.Lambda_hat; % Modify if necessary
 
     % DRT estimation
     [gamma_est, V_est, theta_discrete, tau_discrete, ~] = DRT_estimation(t, ik, V_sd, lambda, n, dt, dur, OCV, R0);
