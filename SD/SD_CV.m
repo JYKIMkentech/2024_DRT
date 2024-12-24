@@ -6,7 +6,7 @@ titleFontSize = 12;
 legendFontSize = 12;
 labelFontSize = 12;
 
-lambda_grids = logspace(-4, 3, 50);
+lambda_grids = logspace(-8, 3, 30);
 num_lambdas = length(lambda_grids);
 OCV = 0;
 R0 = 0.1;
@@ -115,7 +115,7 @@ for m = 1 : num_lambdas  % 모든 lamda에 대해서 loop
             n = type_data(j).n;
             I = type_data(j).I;
             V = type_data(j).V;
-            j
+            
             [~, ~, ~, ~, W_val, ~] = DRT_estimation(t, I, V, lambda, n, dt, dur, OCV,R0);
             V_est = OCV + I * R0 + W_val * gamma_total;
 
@@ -140,7 +140,7 @@ for i = 1:length(type_data)
     type_data(i).Lambda_hat = optimal_lambda;
 end
 selected_dataset(type_indices) = type_data;
-%assignin('base', selected_dataset_name, selected_dataset);
+assignin('base', selected_dataset_name, selected_dataset);
 
 %% 데이터 저장
 
@@ -149,8 +149,8 @@ if ~exist(save_path, 'dir')
     mkdir(save_path);
 end
 % 선택된 데이터셋을 지정된 폴더에 저장
-%save(fullfile(save_path, [selected_dataset_name, '.mat']), selected_dataset_name);
-%fprintf('Updated dataset saved to %s\n', fullfile(save_path, [selected_dataset_name, '.mat']));
+save(fullfile(save_path, [selected_dataset_name, '.mat']), selected_dataset_name);
+fprintf('Updated dataset saved to %s\n', fullfile(save_path, [selected_dataset_name, '.mat']));
 
 %% 5. Plot (CVE vs lambda)
 
@@ -162,7 +162,7 @@ ylabel('CVE', 'FontSize', labelFontSize);
 title('CVE vs \lambda ', 'FontSize', titleFontSize);
 grid on;
 legend({'CVE', ['Optimal \lambda = ', num2str(optimal_lambda, '%.2e')]}, 'Location', 'best');
-ylim([1341 1342])
+%ylim([1072.38 1072.39])
 
 hold off;
 
