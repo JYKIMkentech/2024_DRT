@@ -1,4 +1,4 @@
-function [gamma_est, V_est, theta_discrete, tau_discrete, W, y] = DRT_estimation(t, ik, V_sd, lambda, n, dt, dur, OCV, R0)
+function [gamma_est, V_est, theta_discrete, tau_discrete, W, y] = DRT_estimation(t, ik, V_sd, lambda, n, dt, ~, OCV, R0)
     % DRT_estimation estimates the gamma function and voltage using DRT.
     %
     % Inputs:
@@ -29,7 +29,11 @@ function [gamma_est, V_est, theta_discrete, tau_discrete, W, y] = DRT_estimation
 
     % Define theta_discrete and tau_discrete based on dur and n
     tau_min = 0.1;  % Minimum tau value in seconds
+<<<<<<< HEAD
     tau_max = 1000;   % Maximum tau value in seconds % dur --> 1000 변경
+=======
+    tau_max = 1000;   % Maximum tau value in seconds
+>>>>>>> 4eb1d480cdb620308eabc0a24c23d88fd387fabf
     theta_min = log(tau_min);
     theta_max = log(tau_max);
     theta_discrete = linspace(theta_min, theta_max, n)';
