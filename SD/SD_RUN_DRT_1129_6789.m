@@ -233,8 +233,16 @@ end
 
 % Proceed only if at least one specific scenario is present
 if ~isempty(specific_indices)
-    % Plot for specific scenarios
-    figure('Name', [AS_name, ' Type ', selected_type, ': Scenarios 6-9 DRT Comparison with Uncertainty'], 'NumberTitle', 'off');
+    % 새 figure 생성 시, (E) 라고 이름을 붙여 주거나
+    figure('Name', [AS_name, ' Type ', selected_type, ': Scenarios 6-9 DRT Comparison with Uncertainty (E)'], 'NumberTitle', 'off');
+    
+    % figure 왼쪽 상단에 (E) 표시
+    annotation('textbox', [0.01 0.94 0.05 0.05], ...  % 위치 조정(좌표는 [left bottom width height])
+               'String', '(E)', ...
+               'FontSize', 14, ...
+               'FontWeight', 'bold', ...
+               'EdgeColor', 'none');  % 테두리 제거
+    
     hold on;
     for idx = 1:length(specific_indices)
         s = specific_indices(idx);
@@ -253,7 +261,8 @@ if ~isempty(specific_indices)
     title([AS_name, ' Type ', selected_type, ': Estimated \gamma with Uncertainty for Scenarios 6-9'], 'FontSize', titleFontSize);
     set(gca, 'FontSize', axisFontSize);
     legend('Location', 'Best', 'FontSize', legendFontSize);
-    ylim([0 inf])
+    ylim([0 inf]);
 else
     disp('No specified scenarios (6, 7, 8, 9) are available for plotting.');
 end
+
