@@ -112,7 +112,7 @@ end
 
 %% ========== (E) 최종 DRT_input 저장 ==========
 save_path = 'G:\공유 드라이브\Battery Software Lab\Projects\DRT\Stanford_DRT';
-save(fullfile(save_path, 'DRT_input.mat'), 'DRT_input');
+save(fullfile(save_path, 'DRT_input.mat'), 'DRT_input', '-v7.3');
 disp('=== 모든 셀/사이클 파싱 완료 & DRT_input.mat 저장 완료 ===');
 
 
