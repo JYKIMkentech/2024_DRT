@@ -1,36 +1,36 @@
 clc; clear; close all;
 
 %% ========== (A) 셀 리스트 및 기본 경로 설정 ==========
-
 cell_list = {'W3','W4','W5','W7','W8','W9','W10','G1','V4','V5'};
 base_path = 'G:\공유 드라이브\BSL_Onori\Cycling_tests';
 
-
-%% ========== (B) DRT_input 구조체 생성 ==========
-
-% 기존 'Trips'라는 필드 대신, Trips_1 ~ Trips_10 각 필드를 미리 정의
+%% ========== (B) DRT_input 구조체 생성 (필드명 변경 및 Q_OPT, SOH 추가) ==========
+% 'Trip1_Driving', 'Trip1_DRT', 'Trip2_Driving', 'Trip2_DRT', ... 식으로
+% 10개 Trip x 2가지 = 총 20개의 Trip 관련 필드 생성
 DRT_input = struct( ...
     'cell_name', {}, ...
     'cycle_number', {}, ...
-    'Trips_1', {}, ...
-    'Trips_2', {}, ...
-    'Trips_3', {}, ...
-    'Trips_4', {}, ...
-    'Trips_5', {}, ...
-    'Trips_6', {}, ...
-    'Trips_7', {}, ...
-    'Trips_8', {}, ...
-    'Trips_9', {}, ...
-    'Trips_10', {}, ...
+    'Trip1_Driving', {}, 'Trip1_DRT', {}, ...
+    'Trip2_Driving', {}, 'Trip2_DRT', {}, ...
+    'Trip3_Driving', {}, 'Trip3_DRT', {}, ...
+    'Trip4_Driving', {}, 'Trip4_DRT', {}, ...
+    'Trip5_Driving', {}, 'Trip5_DRT', {}, ...
+    'Trip6_Driving', {}, 'Trip6_DRT', {}, ...
+    'Trip7_Driving', {}, 'Trip7_DRT', {}, ...
+    'Trip8_Driving', {}, 'Trip8_DRT', {}, ...
+    'Trip9_Driving', {}, 'Trip9_DRT', {}, ...
+    'Trip10_Driving', {}, 'Trip10_DRT', {}, ...
     'OCV', {}, ...
     'Q_OCV', {}, ...
+    'Q_OPT', {}, ...
     'Driving_high_SOC', {}, ...
     'DRT_high_SOC', {}, ...
     'Driving_mid_SOC', {}, ...
     'DRT_mid_SOC', {}, ...
     'Driving_low_SOC', {}, ...
     'DRT_low_SOC', {}, ...
-    'DRT_feature', {});
+    'DRT_feature', {}, ...
+    'SOH', {} );
 
 count = 0;
 
@@ -59,15 +59,19 @@ for cycle_idx = 1:14
         DRT_input(count).cell_name    = present_cells{c};
         DRT_input(count).cycle_number = cycle_idx;
         
-        % Trips_1~Trips_10 필드를 빈 배열로 초기화
+        % TripN_Driving / TripN_DRT 필드를 모두 빈 배열로 초기화
         for tnum = 1:10
-            fieldName = sprintf('Trips_%d', tnum);
-            DRT_input(count).(fieldName) = []; 
+            drivingField = sprintf('Trip%d_Driving', tnum);
+            drtField     = sprintf('Trip%d_DRT', tnum);
+            
+            DRT_input(count).(drivingField) = [];
+            DRT_input(count).(drtField)     = [];
         end
         
-        % OCV/Q_OCV 등 필요한 나머지 필드도 초기화
+        % 나머지 필드도 빈 배열로 초기화
         DRT_input(count).OCV              = [];
         DRT_input(count).Q_OCV            = [];
+        DRT_input(count).Q_OPT            = [];
         DRT_input(count).Driving_high_SOC = [];
         DRT_input(count).DRT_high_SOC     = [];
         DRT_input(count).Driving_mid_SOC  = [];
@@ -75,12 +79,11 @@ for cycle_idx = 1:14
         DRT_input(count).Driving_low_SOC  = [];
         DRT_input(count).DRT_low_SOC      = [];
         DRT_input(count).DRT_feature      = [];
+        DRT_input(count).SOH              = [];
     end
 end
 
-
 %% ========== (C) cell_list 순서 + cycle_number 순서로 정렬 ==========
-
 all_cell_names = {DRT_input.cell_name};
 all_cycles     = [DRT_input.cycle_number];
 
@@ -89,9 +92,7 @@ all_cycles     = [DRT_input.cycle_number];
 
 DRT_input = DRT_input(sorted_idx);
 
-
 %% ========== (D) 실제 파일 로드 및 UDDS 파싱 => Nx3 double로 변환해서 저장 ==========
-
 for i = 1:length(DRT_input)
     cyc       = DRT_input(i).cycle_number;
     cell_name = DRT_input(i).cell_name;
@@ -102,8 +103,7 @@ for i = 1:length(DRT_input)
     if exist(mat_path, 'file')
         % 1) 파일 로드
         load(mat_path, '-mat');  
-        %   여기서 t_full_vec_M1_NMC25degC, I_full_vec_M1_NMC25degC, ...
-        %   V_full_vec_M1_NMC25degC, Step_Index_full_vec_M1_NMC25degC 등이 있다고 가정
+        %   예: t_full_vec_M1_NMC25degC, I_full_vec_M1_NMC25degC, V_full_vec_M1_NMC25degC, ...
         
         % 2) UDDS 파싱
         time      = t_full_vec_M1_NMC25degC;
@@ -112,57 +112,53 @@ for i = 1:length(DRT_input)
         step_arbi = Step_Index_full_vec_M1_NMC25degC;
         
         trips_parsed = parseUDDS(time, curr, volt, step_arbi);
-        % trips_parsed는 (N×1 struct), 각 element에 .t, .I, .V, .time_reset, .step 등이 있음
+        % => (N×1 struct): .t, .I, .V, .time_reset, .step 등
         
-        % 3) 최대 10개 트립만 Nx3 double로 변환하여 DRT_input(i)에 저장
+        % 3) 최대 10개 UDDS 구간만 Nx3 double로 변환하여 "TripN_Driving"에 저장
+        %    (TripN_DRT 는 일단 빈 배열로 두기)
         maxTrips = 10;
         nSub     = length(trips_parsed);
         
         for j = 1:maxTrips
-            fieldName = sprintf('Trips_%d', j);
+            drivingField = sprintf('Trip%d_Driving', j);
+            drtField     = sprintf('Trip%d_DRT',     j);
             
             if j <= nSub
-                % [t, I, V] 열벡터로 만듦 => Nx3
                 t_j = trips_parsed(j).t(:);
                 I_j = trips_parsed(j).I(:);
                 V_j = trips_parsed(j).V(:);
                 
                 data_j = [t_j, I_j, V_j];   % Nx3
             else
-                data_j = [];               % 존재 안 하면 빈 배열
+                data_j = [];               % 해당 구간이 없으면 빈 배열
             end
             
-            DRT_input(i).(fieldName) = data_j;
+            % Driving 쪽에만 UDDS 파싱 결과를 저장
+            DRT_input(i).(drivingField) = data_j;
+            % DRT_input(i).(drtField)는 그대로 [] 유지
         end
         
-        % (필요하다면 여기서 OCV, Q_OCV 등 다른 분석도 수행 후 저장)
+        % (필요하다면 추가 분석하여 OCV, Q_OCV, Q_OPT 등도 DRT_input(i)에 저장)
         
     else
         warning('파일이 존재하지 않습니다: %s', mat_path);
     end
 end
 
-
-%% ========== (E) 최종 DRT_input2.mat로 저장 ==========
-
+%% ========== (E) 최종 DRT_input.mat로 저장 ==========
 save_path = 'G:\공유 드라이브\Battery Software Lab\Projects\DRT\Stanford_DRT';
 save(fullfile(save_path, 'DRT_input.mat'), 'DRT_input', '-v7.3');
 
-disp('=== 모든 셀/사이클 파싱 완료 & DRT_input2.mat 저장 완료 ===');
-
+disp('=== 모든 셀/사이클 파싱 완료 & DRT_input.mat 저장 완료 ===');
 
 %% ========== 부록: UDDS 파싱 함수 (이전과 동일) ==========
-
 function trips = parseUDDS(time, curr, volt, step_arbin)
     %{
       parseUDDS 함수: UDDS 파싱하여 trips라는 N×1 struct 배열을 반환
       각 요소: .t, .I, .V, .step, .time_reset 등
-      (아래는 질문에서 제시된 코드를 그대로 함수화한 예시입니다.)
+      (아래는 질문에서 주신 코드를 그대로 함수화한 예시입니다.)
     %}
     
-    % -------------------------------
-    % 1) 구조체 및 step 구간 분할
-    % -------------------------------
     data_raw.V    = volt;
     data_raw.I    = curr;
     data_raw.t    = time;
@@ -186,20 +182,16 @@ function trips = parseUDDS(time, curr, volt, step_arbin)
         data(iSeg).time_reset = data(iSeg).t - data(iSeg).t(1);
     end
     
-    % -------------------------------
-    % 2) 14번째 스텝 + 바로 앞 2개 스텝 => trips(1..3)
-    % -------------------------------
+    % 14번째 step + 바로 앞 2개 step => trips(1..3) 예시
     aging_cycle = 14;
     indices_with_step14 = find([data.step] == aging_cycle);
     if isempty(indices_with_step14)
-        % 14번째 구간이 없다면 그대로 data 전체를 반환
         trips = data;
         return;
     end
     
     first_index_14 = indices_with_step14(1);
     if first_index_14 <= 2
-        % 14번째 step 앞에 2개 step이 없다면 그대로 반환
         trips = data;
         return;
     end
@@ -209,9 +201,7 @@ function trips = parseUDDS(time, curr, volt, step_arbin)
     
     trips_3 = data(desired_indices);
     
-    % -------------------------------
-    % 3) trips(1)+trips(2)+trips(3)에서 음의 피크 탐색
-    % -------------------------------
+    % 음의 피크 탐색
     t_total = vertcat(trips_3(:).t);
     I_total = vertcat(trips_3(:).I);
     
@@ -225,9 +215,7 @@ function trips = parseUDDS(time, curr, volt, step_arbin)
     peakTimes  = t_total(locs);
     peakValues = I_total(locs);
     
-    % -------------------------------
-    % 4) 14번째 스텝(trips(3)) 내에서 홀수 피크 기반 세분화
-    % -------------------------------
+    % 14번째 스텝에서 홀수 피크 기반 세분화
     t_start_14 = trips_3(3).t(1);
     t_end_14   = trips_3(3).t(end);
     
@@ -237,23 +225,18 @@ function trips = parseUDDS(time, curr, volt, step_arbin)
     
     numPeaks_14 = length(peakTimes_14);
     if numPeaks_14 < 2
-        % 피크가 2개 미만이면 분할 없이 사용
         subTrips = trips_3(3);
     else
-        % (a) 홀수 피크 인덱스
         odd_idx_14   = 1:2:numPeaks_14;
         odd_times_14 = peakTimes_14(odd_idx_14);
         
-        % (b) 홀수 피크 간 시간차
         timeDiffs_14_odd = diff(odd_times_14);
         
-        % (c) 경계시간 = t_start_14 + [0; cumulative sum]
         boundaryTimes = t_start_14 + [0; cumsum(timeDiffs_14_odd)];
         if boundaryTimes(end) < t_end_14
             boundaryTimes(end+1) = t_end_14;
         end
         
-        % (d) 서브 트립 구간 분할
         template_sub = trips_3(3);
         template_sub.V = [];
         template_sub.I = [];
@@ -284,8 +267,6 @@ function trips = parseUDDS(time, curr, volt, step_arbin)
         end
     end
     
-    % -------------------------------
-    % 5) 최종 trips = [ trips(1:2); subTrips ]
-    % -------------------------------
     trips = [trips_3(1:2); subTrips];
 end
+
