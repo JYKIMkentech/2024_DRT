@@ -1,7 +1,7 @@
 clc; clear; close all;
 
 %% (0) 로드 경로 지정 및 파일 경로에서 제목 문자열 생성
-loadPath = 'G:\공유 드라이브\BSL_Onori\Cycling_tests\Processed_1\W7.mat';
+loadPath = 'G:\공유 드라이브\BSL_Onori\Cycling_tests\Processed_3\V5.mat';
 [folderPath, fileName, ~] = fileparts(loadPath);
 [~, folderName] = fileparts(folderPath);
 plotTitle = sprintf('%s_%s_UDDS', folderName, fileName);
@@ -316,7 +316,7 @@ ylabel('current')
 
 figure(2)
 plot(vertcat(data(4).t, data(5).t, data(6).t,data(7).t), vertcat(data(4).I, data(5).I, data(6).I,data(7).I));
-xlim([31400 31600]);
+%xlim([31400 31600]);
 xlabel('time')
 ylabel('current')
 
