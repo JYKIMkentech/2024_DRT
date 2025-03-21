@@ -1,9 +1,6 @@
 clear;clc;close all;
 
-% CSV 파일을 table 형식으로 불러오기
 data = readtable('G:\공유 드라이브\BSL_WC\Publishing_data_raw_data_cell_089.csv');
-
-
 
 time = data.Test_Sec_;
 voltage = data.Volts;
