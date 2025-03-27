@@ -12,10 +12,14 @@ data = py.pickle.load(fid);
 
 disp(data)  % DataFrame 구조 확인 (옵션)
 
+% DataFrame의 컬럼(열) 이름을 동적으로 추출
+pyColumns = cell(py.list(data.columns.tolist()));
+colNames = cellfun(@char, pyColumns, 'UniformOutput', false);
+
 %% 2. DataFrame → MATLAB 변환
-% (A) 인덱스( (cell, cycle) )와 값(9개 컬럼)을 MATLAB cell/배열로 변환
+% (A) 인덱스( (cell, cycle) )와 값(모든 열의 데이터)을 MATLAB cell/배열로 변환
 pyIndex = cell(py.list(data.index.tolist()));   % 각 요소: Python tuple (예: {'cell_003', 1.0})
-pyValues = cell(py.list(data.values.tolist())); % 각 행의 9개 데이터 (Python list)
+pyValues = cell(py.list(data.values.tolist()));   % 각 행의 데이터 (Python list)
 
 nRows = length(pyIndex);
 cellNames = cell(nRows,1);
@@ -23,98 +27,89 @@ cycleNumbers = zeros(nRows,1);
 
 % (B) (cell, cycle) 분리 추출
 for i = 1:nRows
-    idxTuple = pyIndex{i};                 % 예: {'cell_003', 1.0}
-    cellNames{i} = char(idxTuple{1});      % 'cell_003'
-    cycleNumbers(i) = double(idxTuple{2}); % 1.0
+    idxTuple = pyIndex{i};              % 예: {'cell_003', 1.0}
+    cellNames{i} = char(idxTuple{1});     % 'cell_003'
+    cycleNumbers(i) = double(idxTuple{2});% 1.0
 end
 
-% (C) 9개 컬럼 데이터를 double 배열로 변환
-nCols = length(pyValues{1});  % 보통 9
+% (C) 각 행의 데이터를 double 배열로 변환 (열의 개수는 동적으로 결정)
+nCols = length(pyValues{1});
 numData = zeros(nRows, nCols);
 for i = 1:nRows
-    rowData = pyValues{i};                 % Python list
+    rowData = pyValues{i};              % Python list
     numData(i,:) = cellfun(@double, cell(rowData));
 end
 
-%% 3. 각 cell별로 묶어서 저장: rawStruct (필드 = cell_001, cell_002, ...)
-uniqueCells = unique(cellNames);  % 고유 cell 이름들
+%% 3. 각 cell별로 묶어서 저장: rawStruct
+% 실제 cell 이름을 그대로 사용하되, MATLAB 구조체 필드로 사용할 수 있도록 유효한 이름으로 변환
+uniqueCells = unique(cellNames);  % 실제 고유 cell 이름들
 nCells = length(uniqueCells);
 
-rawStruct = struct();  % 각 필드에 cell별 데이터 저장
+rawStruct = struct();
 for i = 1:nCells
-    cName = uniqueCells{i};
-    idx = strcmp(cellNames, cName);  % 이 cell에 해당하는 행
-    rawStruct.(cName).Cycle                = cycleNumbers(idx);
-    rawStruct.(cName).C40_charge_CC        = numData(idx, 1);
-    rawStruct.(cName).C40_charge_CCCV      = numData(idx, 2);
-    rawStruct.(cName).C40_discharge_CC     = numData(idx, 3);
-    rawStruct.(cName).C40_discharge_CCCV   = numData(idx, 4);
-    rawStruct.(cName).C2_charge_CC         = numData(idx, 5);
-    rawStruct.(cName).C2_charge_CCCV       = numData(idx, 6);
-    rawStruct.(cName).C2_discharge_CC      = numData(idx, 7);
-    rawStruct.(cName).C2_discharge_CCCV    = numData(idx, 8);
-    rawStruct.(cName).Normalized_Cumulative= numData(idx, 9);
+    % MATLAB 구조체 필드로 사용 가능한 이름 생성
+    validName = matlab.lang.makeValidName(uniqueCells{i});
+    idx = strcmp(cellNames, uniqueCells{i});
+    
+    % 원래의 셀 이름은 ActualName 필드에 저장 (나중에 결과에 반영)
+    rawStruct.(validName).ActualName = uniqueCells{i};
+    rawStruct.(validName).Cycle = cycleNumbers(idx);
+    
+    % DataFrame의 모든 열에 대해 동적으로 데이터를 저장
+    for k = 1:length(colNames)
+        colName = colNames{k};
+        validColName = matlab.lang.makeValidName(colName);
+        rawStruct.(validName).(validColName) = numData(idx, k);
+    end
 end
 
-% 이 시점에서 rawStruct를 클릭하면,
-%  ├─ cell_001
-%  ├─ cell_002
-%  ├─ ...
-% 와 같이 필드별로 분리되어 있는 구조체입니다.
+%% 4. 모든 cell과 cycle을 한 ‘세로’로 이어붙여 “표”처럼 만들기: resultStruct
+% 각 행(row)은 모든 (cell, cycle) 조합, 열(column)은 'Cell', 'Cycle'과 DataFrame의 컬럼 이름
 
-%% 4. 모든 cell과 cycle을 한 ‘세로’에 이어붙여 “표”처럼 만들기
-%   => resultStruct (Nx1 구조체 배열)
-%      열(column)은 {'Cell','Cycle','C40_charge_CC', ... 'Normalized_Cumulative'}
-%      행(row)은 모든 (cell, cycle) 조합
-
-cellFields = fieldnames(rawStruct);  % 예: {'cell_001'; 'cell_002'; ...}
+% 먼저 전체 행 수 계산
 nTotal = 0;
+cellFields = fieldnames(rawStruct);  % 유효한 cell 필드명들
 for i = 1:length(cellFields)
     nTotal = nTotal + length(rawStruct.(cellFields{i}).Cycle);
 end
 
-% 미리 Nx1 크기의 구조체 배열 resultStruct 할당
-resultStruct(nTotal,1).Cell = '';  % 마지막 인덱스까지 미리 잡아둠
-resultStruct(nTotal,1).Cycle = 0;
-resultStruct(nTotal,1).C40_charge_CC = 0;
-resultStruct(nTotal,1).C40_charge_CCCV = 0;
-resultStruct(nTotal,1).C40_discharge_CC = 0;
-resultStruct(nTotal,1).C40_discharge_CCCV = 0;
-resultStruct(nTotal,1).C2_charge_CC = 0;
-resultStruct(nTotal,1).C2_charge_CCCV = 0;
-resultStruct(nTotal,1).C2_discharge_CC = 0;
-resultStruct(nTotal,1).C2_discharge_CCCV = 0;
-resultStruct(nTotal,1).Normalized_Cumulative = 0;
+% 결과 구조체에 들어갈 필드 목록 결정: 'Cell', 'Cycle' + DataFrame의 컬럼들(유효한 이름)
+colFieldNames = cell(size(colNames));
+for k = 1:length(colNames)
+    colFieldNames{k} = matlab.lang.makeValidName(colNames{k});
+end
 
-idxRow = 1;  % 구조체 배열에서 채워나갈 row 인덱스
+% 결과 구조체의 기본 구조 생성 (모든 필드가 포함된 빈 구조체)
+sEmpty = struct('Cell', '', 'Cycle', 0);
+for k = 1:length(colFieldNames)
+    sEmpty.(colFieldNames{k}) = 0;
+end
+
+% 사전 할당: 모든 요소가 같은 필드 구성을 갖도록 함
+resultStruct = repmat(sEmpty, nTotal, 1);
+
+% 각 (cell, cycle) 조합에 대해 구조체 채우기
+idxRow = 1;
 for i = 1:length(cellFields)
-    cName = cellFields{i};
-    nCycle = length(rawStruct.(cName).Cycle);
+    validName = cellFields{i};                 % MATLAB 구조체 필드명 (유효한 이름)
+    actualName = rawStruct.(validName).ActualName; % 실제 cell 이름
+    nCycle = length(rawStruct.(validName).Cycle);
     
     for j = 1:nCycle
-        resultStruct(idxRow).Cell = cName;  % 예: 'cell_003'
-        resultStruct(idxRow).Cycle = rawStruct.(cName).Cycle(j);
-        
-        resultStruct(idxRow).C40_charge_CC        = rawStruct.(cName).C40_charge_CC(j);
-        resultStruct(idxRow).C40_charge_CCCV      = rawStruct.(cName).C40_charge_CCCV(j);
-        resultStruct(idxRow).C40_discharge_CC     = rawStruct.(cName).C40_discharge_CC(j);
-        resultStruct(idxRow).C40_discharge_CCCV   = rawStruct.(cName).C40_discharge_CCCV(j);
-        resultStruct(idxRow).C2_charge_CC         = rawStruct.(cName).C2_charge_CC(j);
-        resultStruct(idxRow).C2_charge_CCCV       = rawStruct.(cName).C2_charge_CCCV(j);
-        resultStruct(idxRow).C2_discharge_CC      = rawStruct.(cName).C2_discharge_CC(j);
-        resultStruct(idxRow).C2_discharge_CCCV    = rawStruct.(cName).C2_discharge_CCCV(j);
-        resultStruct(idxRow).Normalized_Cumulative= rawStruct.(cName).Normalized_Cumulative(j);
-        
+        resultStruct(idxRow).Cell = actualName;
+        resultStruct(idxRow).Cycle = rawStruct.(validName).Cycle(j);
+        % DataFrame의 모든 열을 동적으로 추가
+        for k = 1:length(colNames)
+            validColName = matlab.lang.makeValidName(colNames{k});
+            resultStruct(idxRow).(validColName) = rawStruct.(validName).(validColName)(j);
+        end
         idxRow = idxRow + 1;
     end
 end
 
-
 %% 5. 결과 저장
 save('finalResult.mat', 'rawStruct', 'resultStruct');
 
-% - rawStruct: cell별로 필드가 나뉜 구조체
-% - resultStruct: 모든 (cell, cycle)을 한눈에 보는 구조체 배열
-
 disp('완료! 이제 resultStruct를 더블클릭하면, 모든 셀이 세로로 이어붙여진 표를 볼 수 있습니다.');
+
 
