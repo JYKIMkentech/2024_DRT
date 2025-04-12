@@ -1,5 +1,10 @@
 clc; clear; close all;
 
+% 72가 chgOCV step
+% 100 부터 주행부하1 시작
+% 125 부터 주행부하2 시작
+% 742 부터 RPT2 시작 
+
 %% 1) 데이터 불러오기
 % cell_059_data.mat을 불러와서 'data' 라는 구조체 배열이 있다고 가정
 load('G:\공유 드라이브\BSL_WC\cell_059_data.mat'); 
