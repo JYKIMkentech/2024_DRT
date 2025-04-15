@@ -79,6 +79,23 @@ legend('show');
 grid on;
 hold off;
 
+
+%% 5) Driving Step 탐색 (새 기준) 및 driving_marker = 2 설정
+drivingIdx = [];  % 인덱스를 모아놓을 배열
+
+for i = 1:nSteps
+    % 조건 1: length(data(i).state) > 2
+    % 조건 2: avgI가 -0.9 ~ -0.7 사이
+    if (length(data(i).state) > 2) && (data(i).avgI >= -0.9) && (data(i).avgI <= -0.7)
+        data(i).driving_marker = 2;
+        drivingIdx(end+1) = i;  %#ok<SAGROW>
+    else
+        data(i).driving_marker = [];
+    end
+end
+
+
+
 %% 최종 결과 저장
 save('soc_ocv_table.mat', 'soc_ocv_cell');
 
