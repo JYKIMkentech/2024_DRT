@@ -77,7 +77,7 @@ for i = 1:nSteps
 end
 drivingIdx = drivingIdx';  % 확인용
 
-%% 6) 전체 전류 파형 그래프 + 드라이빙 스텝 "최대 전류 지점" 표시
+%% 6) 전체 전류 파형 그래프 + 드라이빙 스텝 & OCV 스텝 “첫 샘플” 표시
 % (a) 전체 전류 파형(파란색 실선)
 t_all = vertcat(data(:).time);
 I_all = vertcat(data(:).I);
@@ -86,24 +86,35 @@ figure('Name','Full I vs. Time');
 plot(t_all, I_all, 'b-');
 hold on; grid on;
 xlabel('Time [s]'); ylabel('Current [A]');
-title('Full Current (blue) + Driving Step Max Current (red o)');
+title('Cell 59 Driving');
 
-% (b) 드라이빙 스텝 중 "I의 최댓값" 지점만 빨간 원으로 표시
-t_driveMax = [];
-I_driveMax = [];
+% (b) 드라이빙 스텝의 “첫 번째 샘플” 빨간 원으로 표시
+t_driveFirst = [];
+I_driveFirst = [];
 
 for i = 1:nSteps
-    if ~isempty(data(i).driving_marker) && (data(i).driving_marker == 2)
-        % 최대 전류 및 그 인덱스
-        [maxVal, idxMax] = max(data(i).I);
-        
-        t_driveMax(end+1,1) = data(i).time(idxMax);
-        I_driveMax(end+1,1) = maxVal;
+    if ~isempty(data(i).driving_marker) && data(i).driving_marker == 2
+        t_driveFirst(end+1,1) = data(i).time(1);
+        I_driveFirst(end+1,1) = data(i).I(1);
     end
 end
 
-plot(t_driveMax, I_driveMax, 'ro', 'MarkerSize',8, 'LineWidth',1.2);
-legend('All Data','Driving Step Max Current','Location','best');
+plot(t_driveFirst, I_driveFirst, 'ro', 'MarkerSize', 8, 'LineWidth', 1.2);
+
+% (c) OCV 스텝의 “첫 번째 샘플” 마젠타 원으로 표시
+t_ocvFirst = [];
+I_ocvFirst = [];
+
+for i = 1:nSteps
+    if ~isempty(data(i).marker) && data(i).marker == 1
+        t_ocvFirst(end+1,1) = data(i).time(1);
+        I_ocvFirst(end+1,1) = data(i).I(1);
+    end
+end
+
+plot(t_ocvFirst, I_ocvFirst, 'mo', 'MarkerSize', 8, 'LineWidth', 1.2);
+
+legend('Current', 'Driving Step 1st Sample', 'OCV Step 1st Sample', 'Location', 'best');
 hold off;
 
 %% 7) 드라이빙 스텝 "cycle"별로 묶어서 Parsing
