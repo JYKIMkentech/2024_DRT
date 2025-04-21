@@ -1,5 +1,9 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Build_Results_cell59_mergeTrips_andPlot_savePNG.m  (2025‑04‑19, unclipped)
+% -------------------------------------------------------------------------
+%  2025‑04‑21 rev:   • 4th column = tRel (Trip‑relative time, t‑t(1))
+%                   • 5th column = SOC
+%                   • All plots/prints updated to use the new SOC column
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 clc; clear; close all;
@@ -32,7 +36,7 @@ for i = 1:nSteps
 end
 
 %% 3) OCV 스텝 탐색 --------------------------------------------------------
-target_C = -0.025;  tol_C = 0.0001;                  % 방전 0.025 C
+target_C = -0.025;  tol_C = 0.0001;                  % 방전 0.025 C
 target_A = target_C * Capacity_Ah;
 ocvIdx   = find(abs([data.avgI] - target_A) < tol_C);
 
@@ -207,7 +211,8 @@ for c = 1:numel(Results)
             end
         end
         
-        Results(c).(fld) = [V , I , t , socVec];    % [V I t SOC]
+        tRel = t - t(1);                            % Trip‑relative time
+        Results(c).(fld) = [V , I , t , tRel , socVec];  % [V I t tRel SOC]
         tripIdx = tripIdx + 1;
     end
 end
@@ -229,11 +234,11 @@ for figIdx = 1:nFigs_SOC
         for k = 1:plotTripsMax
             fld = sprintf('Trips_%d',k);
             if isfield(Results(cyclePtr),fld) && ~isempty(Results(cyclePtr).(fld))
-                T   = Results(cyclePtr).(fld);            % [V I t SOC]
+                T   = Results(cyclePtr).(fld);            % [V I t tRel SOC]
                 big = [big ; T];                          %#ok<AGROW>
                 tB(end+1)   = T(end,3);
                 vB(end+1)   = T(end,1);
-                socB(end+1) = T(end,4);
+                socB(end+1) = T(end,5);
             end
         end
         if isempty(big), cyclePtr = cyclePtr + 1; continue; end
@@ -244,7 +249,7 @@ for figIdx = 1:nFigs_SOC
         ylabel('V  [V]');
 
         yyaxis right
-        plot(big(:,3), big(:,4)*100, 'g-');
+        plot(big(:,3), big(:,5)*100, 'g-');
         plot(tB, socB*100, 'ko','MarkerFaceColor','w','MarkerSize',4, ...
              'HandleVisibility','off');
         ylabel('SOC  [%]'); grid on; hold off;
@@ -276,7 +281,7 @@ for tr = 1:maxShow
     
     T       = Results(cycShow).(fld);
     t       = T(:,3);
-    socVec  = T(:,4);
+    socVec  = T(:,5);        % SOC column
     I       = T(:,2);
     Idt     = cumtrapz(t - t(1), I);
     Qtrip   = Idt(end);
@@ -306,5 +311,6 @@ exportgraphics(figE, fullfile(outDir, ...
 save('Results.mat','Results');
 fprintf('▶ 완료: Results.mat + PNG 파일들이 “%s” 폴더에 저장되었습니다.\n', ...
         outDir);
+
 
 
