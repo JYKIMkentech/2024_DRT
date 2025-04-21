@@ -36,18 +36,36 @@ for i = 1:nSteps
 end
 
 %% 3) OCV 스텝 탐색 --------------------------------------------------------
-target_C = -0.025;  tol_C = 0.0001;                  % 방전 0.025 C
-target_A = target_C * Capacity_Ah;
-ocvIdx   = find(abs([data.avgI] - target_A) < tol_C);
+target_C = -0.025;                 % ― 충전 0.025 C   (*기존 -0.025*)
+tol_C    = 0.0001;                 % 허용 오차 (C‑rate 단위)
+target_A = target_C * Capacity_Ah; % 목표 전류 [A]
 
+% 충전 OCV 스텝 인덱스 탐색
+ocvIdx = find(abs([data.avgI] - target_A) < tol_C);
+
+% OCV‑SOC 테이블 생성 ─ 충·방전 구분
 soc_ocv_cell = cell(numel(ocvIdx),1);
+isDischargeOCV = target_C < 0;     % 부호로 판단
+
 for k = 1:numel(ocvIdx)
     s = ocvIdx(k);
-    t = data(s).time;  I = data(s).I;  V = data(s).voltage;
-    Q = cumtrapz(t,I);  SoC = 1 - Q/Q(end);
+    t = data(s).time;
+    I = data(s).I;
+    V = data(s).voltage;
+
+    Q   = cumtrapz(t, I);          % 적분 전하 [A·s]
+
+    if isDischargeOCV
+        SoC = 1 - Q ./ Q(end);     % 방전 OCV (기존 방식)
+    else
+        SoC =      Q ./ Q(end);    % ★ 충전 OCV ★
+    end
+
     soc_ocv_cell{k} = [SoC(:) , V(:)];
 end
-refOCV = soc_ocv_cell{1};
+
+refOCV = soc_ocv_cell{1};          % [SoC  V]  (0→1  ↗︎)
+
 
 %% 4) Driving 스텝 탐색 ----------------------------------------------------
 drivingIdx = find(arrayfun(@(x) ...
@@ -80,7 +98,7 @@ for cycVal = uniqueCycles.'
     while k <= numel(rawTrips)
         tailZeros = countTrailingZeros(cur(:,2));
         if (tailZeros >= minZeroTail) || (k==numel(rawTrips))
-            merged{end+1} = cur;                       %#ok<AGROW>
+            merged{end+1} = cur;                      
             k = k + 1;
             if k <= numel(rawTrips), cur = rawTrips{k}; end
         else

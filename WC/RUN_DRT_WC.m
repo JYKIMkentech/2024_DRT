@@ -4,20 +4,21 @@ clc; clear; close all;
 % Run_DRT_from_Results.m
 % -------------------------------------------------------------------------
 %  Input  : Results.mat  (Trip‑wise [V  I  t_abs  tRel  SOC])
-%  Output : γ̂, R0̂, V_est, bootstrap 5–95 % bands, PNG & MAT files
+%  Output : γ̂, R0̂, V_est, bootstrap 5–95 % bands, RMSE, PNG & MAT files
 %
-%  2025‑04‑21 rev‑2
+%  2025‑04‑21 rev‑3
 %    • Results.Trips_* = 5‑col format (V I t_abs tRel SOC)
 %    • 전압+전류 그림: 더 이상 x‑lim 없음 (전체 구간 표시)
 %    • 전압 비교 전용 그림 추가 (0‑100 s, 전류 미표시)
+%    • ▶ Trip‑별 전압 RMSE 계산·저장 기능 추가
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %% USER SETTINGS ----------------------------------------------------------
-n            = 201;        % theta grid size
-tau_max      = 20000;     % τ_max [s]
-lambda_hat   = 0.5;        % ℓ₂‑regularisation
-Q_batt_Ah    = 5;          % battery capacity [Ah]
-num_bs       = 100;        % bootstrap repeats
+n            = 201;         % theta grid size
+tau_max      = 20000;       % τ_max [s]
+lambda_hat   = 0.5;         % ℓ₂‑regularisation
+Q_batt_Ah    = 5;           % battery capacity [Ah]
+num_bs       = 100;         % bootstrap repeats
 outDir       = 'DRT_Figures';
 
 if ~exist(outDir,'dir'), mkdir(outDir); end
@@ -25,7 +26,7 @@ if ~exist(outDir,'dir'), mkdir(outDir); end
 %% 1) load data -----------------------------------------------------------
 load('Results.mat','Results');
 
-soc_ocv    = Results(1).OCV;
+soc_ocv    = Results(1).OCV;      % [SoC  V]
 soc_values = soc_ocv(:,1);
 ocv_values = soc_ocv(:,2);
 nCycles    = numel(Results);
@@ -37,9 +38,10 @@ gamma_low    = {};
 gamma_high   = {};
 R0_single    = {};
 V_est_cell   = {};
+RMSE_V       = {};            % ▶ Trip‑별 전압 RMSE [V]
 
 %% 3) main loop -----------------------------------------------------------
-for c = 1      % 전체 처리: 1:nCycles
+for c = 1 % 1: nCycles           % 필요 시 1:nCycles 전체 수행
     cyc = Results(c).cycle_num;
     fprintf('=== Cycle %d (index %d/%d) ===\n',cyc,c,nCycles);
 
@@ -61,6 +63,11 @@ for c = 1      % 전체 처리: 1:nCycles
         [gamma_hat,R0_hat,V_est] = DRT_estimation_aug( ...
             tRel, I, V, lambda_hat, n, tau_max, ...
             SOC, soc_values, ocv_values);
+
+        % ------- RMSE 계산 ---------------------------------------------
+        rmse = sqrt( mean( (V - V_est).^2 ) );
+        fprintf('      RMSE(V) = %.4f V\n', rmse);
+        RMSE_V{c,tripIdx} = rmse;          % ▶ 저장
 
         % ------- bootstrap ---------------------------------------------
         SOC_begin = SOC(1);
@@ -125,15 +132,16 @@ for c = 1      % 전체 처리: 1:nCycles
             sprintf('Gamma_cyc%03d_trip%02d.png',cyc,tripIdx)), ...
             'Resolution',300);
 
+                  
         tripIdx = tripIdx + 1;
     end
 end
 
 %% 4) save MAT files ------------------------------------------------------
-save('DRT_gamma_single.mat',    'gamma_single', 'R0_single');
+save('DRT_gamma_single.mat',    'gamma_single', 'R0_single', 'RMSE_V');  % ▶
 save('DRT_gamma_bootstrap.mat', 'gamma_mean',   'gamma_low', 'gamma_high');
 
 fprintf('\n▶ 완료: 모든 그림과 MAT 파일이 “%s”에 저장되었습니다.\n', outDir);
-
-
 disp('Run_DRT_from_Results: complete.');
+
+
