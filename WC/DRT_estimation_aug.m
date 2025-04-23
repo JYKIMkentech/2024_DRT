@@ -37,7 +37,7 @@ dtheta  = theta(2)-theta(1);
 
 % ----- build convolution matrix W ---------------------------------------
 W  = zeros(N,n);
-dt = [t(1); diff(t)];
+dt = [0 ; diff(t)];
 
 for i = 1:n
     a      = exp(-dt./tau(i));

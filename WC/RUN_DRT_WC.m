@@ -16,7 +16,7 @@ clc; clear; close all;
 %% USER SETTINGS ----------------------------------------------------------
 n            = 201;         % theta grid size
 tau_max      = 20000;       % τ_max [s]
-lambda_hat   = 0.5;         % ℓ₂‑regularisation
+lambda_hat   = 1.17 ; %0.0417;         % ℓ₂‑regularisation
 Q_batt_Ah    = 5;           % battery capacity [Ah]
 num_bs       = 100;         % bootstrap repeats
 outDir       = 'DRT_Figures';

@@ -27,58 +27,45 @@ validTrips = find(cellfun(@(x) ~isempty(x), tripCells));
 %% 3) 파라미터 설정
 n            = 201;                     % 분해능 파라미터
 dur          = 20000;                    % [sec]
-lambda_grids = logspace(-2,2,20);       % 후보 λ 그리드
+lambda_grids = logspace(-1.5,2,30);       % 후보 λ 그리드
 num_lambdas  = numel(lambda_grids);
 
-%% 4) Trip-level 교차검증 조합 생성
-validation_combinations = nchoosek(validTrips,2);
-num_folds              = size(validation_combinations,1);
-CVE_total              = zeros(num_lambdas,1);
+%% 4) Trip-level 교차검증 조합 생성 (인접한 쌍만)
+% validTrips = [1,2,3,4,5,6]이라 가정
+adj_pairs = [ validTrips(1:end-1), validTrips(2:end) ];
+num_folds    = size(adj_pairs,1);
+CVE_total    = zeros(num_lambdas,1);
 
 %% 5) λ별 교차검증 수행
 for m = 1:num_lambdas
     lambda = lambda_grids(m);
-    CVE = 0;
+    CVE    = 0;
 
     for f = 1:num_folds
-        val_trips   = validation_combinations(f,:);
-        train_trips = setdiff(validTrips, val_trips);
+        val_trips   = adj_pairs(f,:);               
+        train_trips = setdiff(validTrips, val_trips);  
         f
-        % 학습용 W_total, y_total 초기화
-        W_total = [];
-        y_total = [];
-
-        % (1) 학습 세트에서 W_aug, y 추출 및 결합
+        % --- (이하 학습 및 검증 과정은 기존과 동일) ---
+        % 1) 학습용 데이터 결합
+        W_total = [];  y_total = [];
         for idx = train_trips
-            T = tripCells{idx};       % [V I t tRel SOC]
-            V = T(:,1);
-            I = T(:,2);
-            t = T(:,4);
-            SOC = T(:,5);
-
-            % 함수 호출: 6번째 W_aug, 7번째 y 반환
+            T = tripCells{idx};
+            V = T(:,1);  I = T(:,2);  t = T(:,4);  SOC = T(:,5);
             [~,~,~,~,~, W_aug, y, ~] = DRT_estimation_aug(t, I, V, ...
                 lambda, n, dur, SOC, soc_values, ocv_values);
-
             W_total = [W_total; W_aug];
             y_total = [y_total; y];
         end
 
-        % γ 및 R₀ 추정
+        % 2) γ, R0 추정
         [gamma_total, R0_total] = DRT_estimation_aug_with_Wy(W_total, y_total, lambda);
 
-        % (2) 검증 세트로 CVE 계산
+        % 3) 검증 세트 CVE 계산
         for idx = val_trips
             T = tripCells{idx};
-            V = T(:,1);
-            I = T(:,2);
-            t = T(:,4);
-            SOC = T(:,5);
-
-            % 함수 호출: 6번째 W_val, 8번째 OCV 반환
+            V = T(:,1);  I = T(:,2);  t = T(:,4);  SOC = T(:,5);
             [~,~,~,~,~, W_val, ~, OCV] = DRT_estimation_aug(t, I, V, ...
                 lambda, n, dur, SOC, soc_values, ocv_values);
-
             V_est = OCV + W_val * [gamma_total; R0_total];
             CVE = CVE + sum((V - V_est).^2);
         end
@@ -88,9 +75,20 @@ for m = 1:num_lambdas
     fprintf('Lambda: %.2e, CVE: %.4f\n', lambda, CVE);
 end
 
-%% 6) 최적 λ 선택 및 플롯
-[~, idx_opt]    = min(CVE_total);
-optimal_lambda  = lambda_grids(idx_opt);
+
+%% 6) λ–CVE 결합 및 Results에 저장
+% λ와 CVE를 묶은 n×2 행렬 생성
+lambda_CVE = [ lambda_grids(:), CVE_total ];
+
+% Results(1)에 새 필드로 추가
+Results(1).lambda_CVE = lambda_CVE;
+
+% .mat 파일에도 업데이트
+save('Results.mat','Results','-append');
+
+%% 7) 최적 λ 선택 및 플롯 (이전과 동일)
+[~, idx_opt]   = min(CVE_total);
+optimal_lambda = lambda_grids(idx_opt);
 
 figure;
 semilogx(lambda_grids, CVE_total, 'b-', 'LineWidth', 1.5); hold on;
@@ -100,7 +98,9 @@ ylabel('CVE','FontSize',14);
 title('CVE vs \lambda (Cycle 1, Trips 1–6)','FontSize',16);
 legend({'CVE', sprintf('Optimal \\lambda = %.2e', optimal_lambda)}, ...
        'Location','best','FontSize',12);
+ylim([90.815 90.817]);
 hold off;
+
 
 %% 부록: γ, R₀ 추정 함수 정의
 function [gamma_est, R0_est] = DRT_estimation_aug_with_Wy(W_total, y_total, lambda_hat)
