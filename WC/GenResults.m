@@ -416,9 +416,16 @@ exportgraphics(figE, fullfile(outDir, ...
     'Resolution',300);
 
 %% 12) MAT 저장 ------------------------------------------------------------
-save('Results.mat','Results');
-fprintf('▶ 완료: Results.mat + PNG 파일들이 “%s” 폴더에 저장되었습니다.\n', ...
-        outDir);
+saveDir = 'G:\공유 드라이브\Battery Software Lab\Projects\DRT\WC_DRT\PreResults';
+
+% 폴더가 없으면 생성
+if ~exist(saveDir,'dir')
+    mkdir(saveDir);
+end
+
+save(fullfile(saveDir,'Results.mat'),'Results');
+
+fprintf('▶ 완료: Results.mat 파일이 "%s" 폴더에 저장되었습니다.\n', saveDir);
 
 
 

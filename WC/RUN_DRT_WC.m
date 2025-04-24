@@ -1,147 +1,165 @@
+%%  Run_DRT_from_Results.m   (rev-9, 2025-04-23)
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%  Input  : PreResults\Results.mat  (Trips_k: m×5 double [V I t tRel SOC])
+%  Output : DRTresults.mat
+%           • Trips_k 그대로
+%           • DRTk      : n×2 [θ γ̂]
+%           • PeakHWk   : p×2 [peakHeight  FWHM]
+%           • Trip별 전압/전류, 전압확대,
+%             γ̂(+피크·FWHM·높이 시각화) 그림
+%           • Trip별 전압 RMSE
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 clc; clear; close all;
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% Run_DRT_from_Results.m
-% -------------------------------------------------------------------------
-%  Input  : Results.mat  (Trip‑wise [V  I  t_abs  tRel  SOC])
-%  Output : γ̂, R0̂, V_est, bootstrap 5–95 % bands, RMSE, PNG & MAT files
-%
-%  2025‑04‑21 rev‑3
-%    • Results.Trips_* = 5‑col format (V I t_abs tRel SOC)
-%    • 전압+전류 그림: 더 이상 x‑lim 없음 (전체 구간 표시)
-%    • 전압 비교 전용 그림 추가 (0‑100 s, 전류 미표시)
-%    • ▶ Trip‑별 전압 RMSE 계산·저장 기능 추가
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
 %% USER SETTINGS ----------------------------------------------------------
-n            = 201;         % theta grid size
-tau_max      = 20000;       % τ_max [s]
-lambda_hat   = 1.17 ; %0.0417;         % ℓ₂‑regularisation
-Q_batt_Ah    = 5;           % battery capacity [Ah]
-num_bs       = 100;         % bootstrap repeats
-outDir       = 'DRT_Figures';
+n            = 201;        % theta grid size
+tau_max      = 20000;      % τ_max [s]
+lambda_hat   = 1.17;       % ℓ₂ regularisation
+Q_batt_Ah    = 5;          % battery capacity [Ah]
+num_bs       = 100;        % bootstrap repeats
 
-if ~exist(outDir,'dir'), mkdir(outDir); end
+%% PATHS ------------------------------------------------------------------
+rootDir = 'G:\공유 드라이브\Battery Software Lab\Projects\DRT\WC_DRT';
+
+preDir  = fullfile(rootDir,'PreResults');           % Results.mat  위치
+drtDir  = fullfile(rootDir,'DRTResults');           % 결과 MAT
+figDir  = fullfile(drtDir ,'DRT_Figures');          % 그림 디렉터리
+
+if ~exist(drtDir,'dir'), mkdir(drtDir); end
+if ~exist(figDir,'dir'), mkdir(figDir); end
 
 %% 1) load data -----------------------------------------------------------
-load('Results.mat','Results');
+load(fullfile(preDir,'Results.mat'),'Results');      % 원본 구조체
 
-soc_ocv    = Results(1).OCV;      % [SoC  V]
+soc_ocv    = Results(1).OCV;              % [SoC  V]
 soc_values = soc_ocv(:,1);
 ocv_values = soc_ocv(:,2);
 nCycles    = numel(Results);
 
 %% 2) containers ----------------------------------------------------------
-gamma_single = {};
-gamma_mean   = {};
-gamma_low    = {};
-gamma_high   = {};
-R0_single    = {};
-V_est_cell   = {};
-RMSE_V       = {};            % ▶ Trip‑별 전압 RMSE [V]
+gamma_est = {};        % γ̂ 단일 추정 (선택)
+RMSE_V    = {};        % Trip별 전압 RMSE
+peak_HW   = {};        % 피크 특징 [height  FWHM]
 
 %% 3) main loop -----------------------------------------------------------
-for c = 1 % 1: nCycles           % 필요 시 1:nCycles 전체 수행
+for c = 1 %:nCycles
     cyc = Results(c).cycle_num;
-    fprintf('=== Cycle %d (index %d/%d) ===\n',cyc,c,nCycles);
+    fprintf('\n=== Cycle %d (index %d/%d) ===\n',cyc,c,nCycles);
 
     tripIdx = 1;
     while true
         fld = sprintf('Trips_%d',tripIdx);
         if ~isfield(Results(c),fld) || isempty(Results(c).(fld)), break; end
 
-        Temp = Results(c).(fld);           % [V I t tRel SOC]
-        V    = Temp(:,1);
-        I    = Temp(:,2);
-        t    = Temp(:,3);                  % 절대시간
-        tRel = Temp(:,4);                  % 0 s 기준 상대시간
-        SOC  = Temp(:,5);
+        Tmp  = Results(c).(fld);                % [V I t tRel SOC]
+        V    = Tmp(:,1);  I   = Tmp(:,2);
+        t    = Tmp(:,3);  tRel= Tmp(:,4);
+        SOC  = Tmp(:,5);
 
         fprintf('  > Trip %d  (N = %d)\n',tripIdx,numel(t));
 
-        % ------- single‑run DRT ----------------------------------------
-        [gamma_hat,R0_hat,V_est] = DRT_estimation_aug( ...
-            tRel, I, V, lambda_hat, n, tau_max, ...
-            SOC, soc_values, ocv_values);
+        % -------- (a) DRT estimation ------------------------------------
+        [g_hat,R0_hat,V_est] = DRT_estimation_aug( ...
+            tRel,I,V,lambda_hat,n,tau_max, ...
+            SOC,soc_values,ocv_values);
 
-        % ------- RMSE 계산 ---------------------------------------------
-        rmse = sqrt( mean( (V - V_est).^2 ) );
-        fprintf('      RMSE(V) = %.4f V\n', rmse);
-        RMSE_V{c,tripIdx} = rmse;          % ▶ 저장
+        % -------- (b) RMSE ---------------------------------------------
+        rmse = sqrt(mean((V-V_est).^2));
+        RMSE_V{c,tripIdx} = rmse;
+        fprintf('      RMSE(V) = %.4f V\n',rmse);
 
-        % ------- bootstrap ---------------------------------------------
-        SOC_begin = SOC(1);
-        gamma_bs  = bootstrap_uncertainty_aug_FromResults( ...
-            tRel, I, V, lambda_hat, n, tau_max, num_bs, ...
-            SOC_begin, Q_batt_Ah, soc_values, ocv_values);
+        % -------- (c) θ & γ̂ 저장 --------------------------------------
+        theta = linspace(log(0.1),log(tau_max),n).';
+        Results(c).(sprintf('DRT%d',tripIdx)) = [theta, g_hat];
+        gamma_est{c,tripIdx} = g_hat;
 
-        g_mean = mean(gamma_bs,1).';
-        g_low  = prctile(gamma_bs,  5,1).';
-        g_high = prctile(gamma_bs, 95,1).';
+        % -------- (d) 피크 특징 추출 -----------------------------------
+        [pks,locs,widths] = findpeaks( ...
+                g_hat, theta, ...
+                'MinPeakProminence',0.01*max(g_hat), ...
+                'WidthReference','halfheight');
+        PeakHW = [pks(:), widths(:)];                 % p×2
+        Results(c).(sprintf('PeakHW%d',tripIdx)) = PeakHW;
+        peak_HW{c,tripIdx} = PeakHW;
 
-        % ------- store --------------------------------------------------
-        gamma_single{c,tripIdx} = gamma_hat;
-        gamma_mean{c,tripIdx}   = g_mean;
-        gamma_low{c,tripIdx}    = g_low;
-        gamma_high{c,tripIdx}   = g_high;
-        R0_single{c,tripIdx}    = R0_hat;
-        V_est_cell{c,tripIdx}   = V_est;
+        % -------- (e) bootstrap (선택) ---------------------------------
+        g_bs = bootstrap_uncertainty_aug_FromResults( ...
+            tRel,I,V,lambda_hat,n,tau_max,num_bs, ...
+            SOC(1),Q_batt_Ah,soc_values,ocv_values);
+        g_low  = prctile(g_bs,5 ,1).';
+        g_high = prctile(g_bs,95,1).';
 
-        % ------- 전압 + 전류 (전체 구간) --------------------------------
-        figVC = figure;
+        % -------- (f) FIGURES ------------------------------------------
+        % (f-1) 전압+전류 전체 (숨김)
+        figVC = figure('Visible','off');
         yyaxis left
-        plot(t, V,     'k',  'LineWidth',1.2); hold on;
-        plot(t, V_est, '--', 'LineWidth',1.2);
+        plot(t,V,'k','LineWidth',1.2); hold on
+        plot(t,V_est,'--','LineWidth',1.2);
         ylabel('Voltage [V]');
         yyaxis right
-        plot(t, I, 'b', 'LineWidth',1);
+        plot(t,I,'b','LineWidth',1);
         ylabel('Current [A]');
         title(sprintf('Cycle %d – Trip %d',cyc,tripIdx));
-        grid on
         legend({'V_{meas}','V_{est}','I'},'Location','best');
-        exportgraphics(figVC, fullfile(outDir, ...
+        grid on
+        exportgraphics(figVC,fullfile(figDir, ...
             sprintf('Volt_curr_ALL_cyc%03d_trip%02d.png',cyc,tripIdx)), ...
             'Resolution',300);
 
-        % ------- 전압 비교 (0‑100 s) ------------------------------------
-        figVZ = figure;
-        plot(tRel, V,     'k',  'LineWidth',1.2); hold on;
-        plot(tRel, V_est, '--', 'LineWidth',1.2);
-        xlabel('Time [s]');
-        ylabel('Voltage [V]');
-        title(sprintf('Voltage (0–100 s) – Cycle %d, Trip %d',cyc,tripIdx));
-        grid on
-        xlim([0 100]);
+        % (f-2) 전압 확대 0-100 s (숨김)
+        figVZ = figure('Visible','off');
+        plot(tRel,V,'k','LineWidth',1.2); hold on
+        plot(tRel,V_est,'--','LineWidth',1.2);
+        xlabel('Time [s]'); ylabel('Voltage [V]');
+        title(sprintf('Voltage (0–100 s) – C%d T%d',cyc,tripIdx));
+        grid on; xlim([0 100]);
         legend({'V_{meas}','V_{est}'},'Location','best');
-        exportgraphics(figVZ, fullfile(outDir, ...
+        exportgraphics(figVZ,fullfile(figDir, ...
             sprintf('Volt_zoom_cyc%03d_trip%02d.png',cyc,tripIdx)), ...
             'Resolution',300);
 
-        % ------- γ(θ) plot ---------------------------------------------
-        theta = linspace(log(0.1), log(tau_max), n).';
-        figG = figure;
-        fill([theta; flipud(theta)], ...
-             [g_low;  flipud(g_high)], ...
-             [0.6 0.4 0.8], 'FaceAlpha',0.2, 'EdgeColor','none'); hold on;
-        plot(theta, g_mean, 'Color',[0.5 0 0.5], 'LineWidth',2);
-        xlabel('\theta = ln(\tau [s])');
-        ylabel('\gamma [\Omega]');
+        % (f-3) γ̂(θ) + 피크 시각화 (화면 표시)
+        figG = figure('Visible','on');                         % **on**
+        plot(theta,g_hat,'Color',[0.5 0 0.5],'LineWidth',1.6); hold on
+
+        % 빨간 ● 마커
+        if ~isempty(pks)
+            scatter(locs,pks,50,'r','filled');
+        end
+
+        % 각 피크: FWHM 가로선 & 높이 세로 점선
+        for i = 1:numel(pks)
+            xL = locs(i) - widths(i)/2;   % FWHM 왼쪽
+            xR = locs(i) + widths(i)/2;   % FWHM 오른쪽
+            yH = pks(i)/2;                % half-height
+
+            % 가로선 (FWHM)
+            plot([xL xR],[yH yH],'r-','LineWidth',1.2);
+            % 세로 점선 (height)
+            plot([locs(i) locs(i)],[0 pks(i)],'r--','LineWidth',0.9);
+        end
+
+        xlabel('\theta = ln(\tau [s])'); ylabel('\gamma [\Omega]');
         title(sprintf('\\gamma – Cycle %d, Trip %d',cyc,tripIdx));
         grid on
-        exportgraphics(figG, fullfile(outDir, ...
+        legend({'\gamma','Peaks','FWHM','Height'},'Location','best');
+
+        exportgraphics(figG,fullfile(figDir, ...
             sprintf('Gamma_cyc%03d_trip%02d.png',cyc,tripIdx)), ...
             'Resolution',300);
 
-                  
         tripIdx = tripIdx + 1;
     end
 end
 
-%% 4) save MAT files ------------------------------------------------------
-save('DRT_gamma_single.mat',    'gamma_single', 'R0_single', 'RMSE_V');  % ▶
-save('DRT_gamma_bootstrap.mat', 'gamma_mean',   'gamma_low', 'gamma_high');
+%% 4) save ---------------------------------------------------------------
+DRTresults = Results;
 
-fprintf('\n▶ 완료: 모든 그림과 MAT 파일이 “%s”에 저장되었습니다.\n', outDir);
+save(fullfile(drtDir,'DRTresults.mat'), ...
+     'DRTresults','gamma_est','RMSE_V','peak_HW','-v7.3');
+
+fprintf('\n▶ 완료:  %s  에  DRTresults.mat  및 모든 그림 저장 완료\n',drtDir);
 disp('Run_DRT_from_Results: complete.');
 
 
