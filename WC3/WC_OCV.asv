@@ -1,0 +1,89 @@
+clc; clear; close all;
+
+% step 9 & state가 2개 이상 인 step =  큰 driving 을 나타내는 지표인듯 
+
+
+%% 1) 데이터 로드 (cell_059_data.mat 불러오기 가정)
+load('G:\공유 드라이브\BSL_WC\cell_059_data.mat'); 
+nSteps = numel(data);
+
+%% 2) 배터리 용량(5000mAh=5Ah) 가정하고 C-rate → 실제 전류(A) 변환 필드 추가
+Capacity_Ah = 5;  % 5000mAh
+for i = 1:nSteps
+    % 만약 data(i).current 가 'C-rate' 단위라면: 실제 전류[A] = current * Capacity_Ah
+    data(i).I = data(i).current * Capacity_Ah;
+end
+
+%% (추가) 각 스텝별 평균 전류(avgI) 계산
+for i = 1:nSteps
+    data(i).avgI = mean(data(i).I);  % 실제 전류 I의 평균값
+end
+
+%% 3) OCV 스텝 찾기 (이미 작성하신 방식)
+target    = -0.025;   % C-rate로 -0.025C 라 가정(방전 OCV)
+tolerance = 0.0001;  
+ocvIdx = [];  
+for i = 1:nSteps
+    % 여기서는 avgI(실제 전류의 평균) 기준으로 판단
+    % -0.025C * 5Ah = -0.125A 에 근접한 스텝 찾기
+    if abs(data(i).avgI - (target * Capacity_Ah)) < tolerance
+        ocvIdx(end+1) = i; %#ok<SAGROW>
+    end
+end
+
+% marker 필드 세팅 (OCV 스텝 표시용)
+[data.marker] = deal([]);
+for iOCV = ocvIdx
+    data(iOCV).marker = 1;
+end
+
+%% 4) 각 OCV 스텝에서 전류 적분 → SOC 계산 & (SoC–OCV) cell 만들기
+soc_ocv_cell = cell(numel(ocvIdx), 1);
+
+for k = 1:numel(ocvIdx)
+    iStep = ocvIdx(k);
+
+    % 필요한 데이터만 꺼내오기
+    t = data(iStep).time;     % [s]
+    I = data(iStep).I;        % [A]
+    v = data(iStep).voltage;  % [V]
+
+    % 전류 적분(A·s). (Ah 단위 필요 시 /3600 추가)
+    Q = cumtrapz(t, I);
+    Qend = Q(end);
+
+    % SoC 계산 (예: 방전 스텝이므로 1→0 형태)
+    SoC = 1 - Q/Qend;
+
+    % (SoC–OCV) 정보를 Nx2 매트릭스(SoC, OCV)로 만들기
+    %  1열: SoC,  2열: OCV
+    soc_ocv_mat = [SoC(:), v(:)];
+
+    % cell에 저장
+    soc_ocv_cell{k} = soc_ocv_mat;
+end
+
+% soc_ocv_cell: 21x1 cell array
+%   각 cell{k}에 2D 매트릭스로 (SoC, OCV)가 들어 있음
+
+%% (추가) SoC–OCV 플롯
+figure; hold on;
+for k = 1:length(soc_ocv_cell)
+    plot(soc_ocv_cell{k}(:,1), soc_ocv_cell{k}(:,2), 'DisplayName', ...
+        sprintf('OCV Step %d', ocvIdx(k)));
+end
+xlabel('SOC');
+ylabel('OCV [V]');
+title('SoC vs OCV (All OCV Steps)');
+legend('show');
+grid on;
+hold off;
+
+%% 최종 결과 저장
+save('soc_ocv_table.mat', 'soc_ocv_cell');
+
+
+
+
+
+
