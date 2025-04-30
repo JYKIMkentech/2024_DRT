@@ -1,338 +1,265 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% Build_Results_cell59_mergeTrips_andPlot_savePNG.m  (2025‑04‑19, unclipped)
-% -------------------------------------------------------------------------
-%  2025‑04‑21 rev:   • 4th column = tRel (Trip‑relative time, t‑t(1))
-%                   • 5th column = SOC
-%                   • All plots/prints updated to use the new SOC column
+% Build_Results_allCells_mergeTrips_andPlot_savePNG.m   (2025-05-01 rev-f)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 clc; clear; close all;
 
-%% USER SETTINGS ----------------------------------------------------------
-minZeroTail   = 50;      % I==0 tail samples ≥ minZeroTail → Trip boundary
-plotTripsMax  = 8;       % Trip 1~8 concat 표시
-plotsPerFig   = 5;       % Figure당 subplot 개수
-subplotCols   = 2;       % subplot 열
-outDir        = 'Figures_PNG';   % PNG 저장 폴더
+%% (0) 사용자 설정 ---------------------------------------------------------
+cellNums    = [57 58 59 60 61 62 63 64 71 72 79 80 89 91];
+dataDir     = 'G:\공유 드라이브\BSL_WC';
+outDirRoot  = 'Figures_PNG';
+saveDir     = 'G:\공유 드라이브\Battery Software Lab\Projects\DRT\WC_DRT\PreResults';
 
-Capacity_Ah   = 5;       % 5000 mAh
-Q_batt_As     = Capacity_Ah * 3600;   % 18 000 A·s
+Capacity_Ah = 5;
+Q_batt_As   = Capacity_Ah*3600;
 
-%% 0) 저장 폴더 ------------------------------------------------------------
-if ~exist(outDir,'dir'), mkdir(outDir); end
+minZeroTail = 50;
+plotTripsMax= 8;  plotsPerFig = 5;  subplotCols = 2;
 
-%% 1) 데이터 로드 ----------------------------------------------------------
-load('G:\공유 드라이브\BSL_WC\cell_059_data.mat');   % 'data' 구조체
-nSteps = numel(data);
+%% (1) 폴더 준비 -----------------------------------------------------------
+if ~exist(outDirRoot,'dir'), mkdir(outDirRoot); end
+if ~exist(saveDir   ,'dir'), mkdir(saveDir);    end
 
-%% 2) I 필드 보강 + avgI ---------------------------------------------------
-if ~isfield(data,'I')
-    for i = 1:nSteps
-        data(i).I = data(i).current * Capacity_Ah;   % C‑rate → A
-    end
-end
-for i = 1:nSteps
-    data(i).avgI = mean(data(i).I);
-end
+%% (2) 결과 누적 구조체 ----------------------------------------------------
+ResultsAll = struct([]);
 
-%% 3) OCV 스텝 탐색 --------------------------------------------------------
-target_C = -0.025;                 % ― 충전 0.025 C   (*기존 -0.025*)
-tol_C    = 0.0001;                 % 허용 오차 (C‑rate 단위)
-target_A = target_C * Capacity_Ah; % 목표 전류 [A]
+%% ========================================================================
+%                               셀 루프                                    %
+%% ========================================================================
+for ci = 1:numel(cellNums)
+    cellID = cellNums(ci);
+    fprintf('\n=== Processing cell %03d (%d/%d) ===\n',cellID,ci,numel(cellNums));
 
-% 충전 OCV 스텝 인덱스 탐색
-ocvIdx = find(abs([data.avgI] - target_A) < tol_C);
+    %% 2-1) 데이터 로드 ----------------------------------------------------
+    matFile = fullfile(dataDir,sprintf('cell_%03d_data.mat',cellID));
+    if ~isfile(matFile)
+        warning('   ▶ 파일 %s 없음 — 건너뜀',matFile);  continue; end
+    load(matFile,'data');  nSteps = numel(data);
 
-% OCV‑SOC 테이블 생성 ─ 충·방전 구분
-soc_ocv_cell = cell(numel(ocvIdx),1);
-isDischargeOCV = target_C < 0;     % 부호로 판단
-
-for k = 1:numel(ocvIdx)
-    s = ocvIdx(k);
-    t = data(s).time;
-    I = data(s).I;
-    V = data(s).voltage;
-
-    Q   = cumtrapz(t, I);          % 적분 전하 [A·s]
-
-    if isDischargeOCV
-        SoC = 1 - Q ./ Q(end);     % 방전 OCV (기존 방식)
-    else
-        SoC =      Q ./ Q(end);    % 충전 OCV 
-    end
-
-    soc_ocv_cell{k} = [SoC(:) , V(:)];
-end
-
-refOCV = soc_ocv_cell{1};          % [SoC  V]  (0→1  ↗︎)
-
-
-%% 4) Driving 스텝 탐색 ----------------------------------------------------
-drivingIdx = find(arrayfun(@(x) ...
-                    numel(x.state)>1 && ismember(x.step,[7 9]), data).').';
-drivingCycles = arrayfun(@(x) data(x).cyc, drivingIdx);
-uniqueCycles  = unique(drivingCycles);
-
-%% 5) TripCell (자동 병합) -------------------------------------------------
-TripCell = cell(max(uniqueCycles),1);
-countTrailingZeros = @(vec) find(vec(end:-1:1)~=0,1,'first')-1;
-
-for cycVal = uniqueCycles.'
-    idxList  = drivingIdx(drivingCycles==cycVal);
-    rawTrips = cell(numel(idxList),1);
-
-    % (a) 원본 Trip 구간
-    for k = 1:numel(idxList)
-        sIdx = idxList(k);
-        if k < numel(idxList),  eIdx = idxList(k+1) - 1;
-        else                    eIdx = min(sIdx + 1, nSteps);
-        end
-        seg = data(sIdx:eIdx);
-        rawTrips{k} = [vertcat(seg.voltage) , vertcat(seg.I) , ...
-                       vertcat(seg.time)];
-    end
-
-    % (b) tail‑zero 기준 병합
-    merged = {};
-    cur    = rawTrips{1};  k = 1;
-    while k <= numel(rawTrips)
-        tailZeros = countTrailingZeros(cur(:,2));
-        if (tailZeros >= minZeroTail) || (k==numel(rawTrips))
-            merged{end+1} = cur;                      
-            k = k + 1;
-            if k <= numel(rawTrips), cur = rawTrips{k}; end
-        else
-            k   = k + 1;
-            cur = [cur ; rawTrips{k}];
+    %% 2-2) I 필드 보강 + avgI --------------------------------------------
+    if ~isfield(data,'I')
+        for i = 1:nSteps
+            data(i).I = data(i).current * Capacity_Ah;
         end
     end
-    TripCell{cycVal} = merged;
-end
-fprintf('▶ Trip 병합 완료 (minZeroTail = %d)\n', minZeroTail);
+    for i = 1:nSteps, data(i).avgI = mean(data(i).I); end
 
-%% 6) Results 구조체 -------------------------------------------------------
-Results = struct([]);
-for c = 1:numel(uniqueCycles)
-    cycVal    = uniqueCycles(c);
-    tripsHere = TripCell{cycVal};
+    %% 2-3) 스텝 탐색 ------------------------------------------------------
+    ocvIdx = find(abs([data.avgI] - (-0.025*Capacity_Ah)) < 1e-4);
+    c2Idx  = find(abs([data.avgI] - (-0.5  *Capacity_Ah)) < 1e-4);
+    c2Idx  = c2Idx(arrayfun(@(i) numel(data(i).time)>=50, c2Idx));
 
-    Results(c).cell_name = 59;
-    Results(c).cycle_num = cycVal;
-    for tIdx = 1:numel(tripsHere)
-        Results(c).(sprintf('Trips_%d',tIdx)) = tripsHere{tIdx};  % [V I t]
-    end
-    Results(c).OCV   = refOCV;
-end
+    drivingIdx = find(arrayfun(@(x) numel(x.state)>1 && ismember(x.step,[7 9]), data));
+    drivingCyc = arrayfun(@(x) data(x).cyc, drivingIdx);
+    uniqueCyc  = unique(drivingCyc);
 
-%% 7) 전체 Current + 마커 ---------------------------------------------------
-t_all = vertcat(data.time);  I_all = vertcat(data.I);
+    %% 2-4) Trip 병합 ------------------------------------------------------
+    TripCell = cell(max(uniqueCyc),1);
+    countTrailingZeros = @(v) find(v(end:-1:1)~=0,1,'first')-1;
 
-fig1 = figure('Name','Full Current with Markers');
-plot(t_all, I_all, 'b-'); hold on; grid on;
-xlabel('Time [s]'); ylabel('Current [A]');
-title('Full Current — OCV (blue ○) & Driving (red ○) markers');
-
-plot(arrayfun(@(i) data(i).time(1), drivingIdx), ...
-     arrayfun(@(i) data(i).I(1),    drivingIdx), ...
-     'ro', 'MarkerSize',6, 'LineWidth',1.2,'DisplayName','Driving step');
-
-plot(arrayfun(@(i) data(i).time(1), ocvIdx), ...
-     arrayfun(@(i) data(i).I(1),    ocvIdx), ...
-     'bo', 'MarkerSize',6, 'LineWidth',1.2,'DisplayName','OCV step');
-
-legend('show','Location','best'); hold off;
-exportgraphics(fig1, fullfile(outDir,'FullCurrent_Markers.png'), ...
-               'Resolution',300);
-
-%% 8) cycle별 Trips(Voltage) Figure ---------------------------------------
-nCycles = numel(Results);
-nFigs   = ceil(nCycles / plotsPerFig);
-subplotRows = ceil(plotsPerFig / subplotCols);
-cyclePtr = 1;
-
-for figIdx = 1:nFigs
-    figC = figure('Name',sprintf('TripsVoltage_fig%02d',figIdx));
-    tiledlayout(subplotRows, subplotCols, 'Padding','compact');
-
-    for p = 1:plotsPerFig
-        if cyclePtr > nCycles, break; end
-        nexttile;
-
-        big = []; tB = []; vB = []; iB = [];
-        for k = 1:plotTripsMax
-            fld = sprintf('Trips_%d',k);
-            if isfield(Results(cyclePtr),fld) && ~isempty(Results(cyclePtr).(fld))
-                T   = Results(cyclePtr).(fld);        % [V I t]
-                big = [big ; T];                      %#ok<AGROW>
-                tB(end+1) = T(end,3);
-                vB(end+1) = T(end,1);
-                iB(end+1) = T(end,2);
+    for cycVal = uniqueCyc.'
+        idx = drivingIdx(drivingCyc==cycVal);
+        raw = cell(numel(idx),1);
+        for k = 1:numel(idx)
+            sIdx = idx(k);
+            if k==1 && sIdx>1 && data(sIdx-1).cyc==cycVal
+                sIdx = sIdx-1;
+            end
+            if k < numel(idx)
+                eIdx = idx(k+1) - 1;
+            else
+                eIdx = min(sIdx+1, nSteps);
+            end
+            seg = data(sIdx:eIdx);
+            raw{k} = [vertcat(seg.voltage), vertcat(seg.I), vertcat(seg.time)];
+        end
+        merged={}; cur=raw{1}; k=1;
+        while k<=numel(raw)
+            if countTrailingZeros(cur(:,2)) >= minZeroTail || k==numel(raw)
+                merged{end+1} = cur;  k = k+1;
+                if k<=numel(raw), cur = raw{k}; end
+            else
+                k = k+1;  cur = [cur; raw{k}];
             end
         end
-        if isempty(big), cyclePtr = cyclePtr + 1; continue; end
-
-        yyaxis left
-        plot(big(:,3), big(:,1), 'b-'); hold on;
-        plot(tB, vB, 'ko','MarkerFaceColor','w','MarkerSize',4);
-        ylabel('V [V]');
-
-        yyaxis right
-        plot(big(:,3), big(:,2), 'r-');
-        plot(tB, iB, 'ko','MarkerFaceColor','w','MarkerSize',4, ...
-             'HandleVisibility','off');
-        ylabel('I [A]'); grid on; hold off;
-
-        title(sprintf('cyc %d', Results(cyclePtr).cycle_num));
-        xlabel('t [s]');
-        cyclePtr = cyclePtr + 1;
+        TripCell{cycVal} = merged;
     end
-    sgtitle('Trip Parsing with boundaries','FontWeight','bold');
+    fprintf('   ▶ Trip 병합 완료 (minZeroTail=%d)\n',minZeroTail);
 
-    exportgraphics(figC, fullfile(outDir, ...
-        sprintf('TripsVoltage_cycSet_%02d.png',figIdx)), 'Resolution',300);
-end
+    %% 2-5) OCV–SOC 테이블 -------------------------------------------------
+    soc_ocv = cell(numel(ocvIdx),1);
+    for k = 1:numel(ocvIdx)
+        s = ocvIdx(k);
+        t = data(s).time;   I = data(s).I;   V = data(s).voltage;
+        Q = cumtrapz(t,I);
+        soc_ocv{k} = [1 - Q./Q(end), V(:)];
+    end
 
-%% 9) Trip별 SoC 계산 (간단 드라이빙 SOC) ------------------
-ocvV   = refOCV(:,2);
-ocvSOC = refOCV(:,1);
-[ocvVuniq, iu] = unique(ocvV,'stable');
-socFromV = @(v) interp1(ocvVuniq, ocvSOC(iu), v, 'linear','extrap');
+    %% 2-6) Results(셀) ----------------------------------------------------
+    nRes = numel(uniqueCyc);
+    if numel(soc_ocv) < nRes
+        warning('   ▶ OCV 스텝 부족 — 셀 %03d 건너뜀',cellID);  continue; end
 
-for c = 1:numel(Results)
-    tripIdx    = 1;
-    prevSocEnd = [];   % 이전 Trip의 마지막 SOC
+    Results = repmat(struct(),1,nRes);
+    for c = 1:nRes
+        cyc = uniqueCyc(c);
+        Results(c).cell_name = cellID;
+        Results(c).cycle_num = cyc;
+        for tIdx = 1:numel(TripCell{cyc})
+            Results(c).(sprintf('Trips_%d',tIdx)) = TripCell{cyc}{tIdx};
+        end
+        Results(c).OCV = soc_ocv{c};
+    end
 
-    while true
-        fld = sprintf('Trips_%d', tripIdx);
-        if ~isfield(Results(c), fld), break; end
-        T = Results(c).(fld);           % [V, I, t, tRel, SOC] → 아직 SOC 열은 미사용
-        if isempty(T)
-            tripIdx = tripIdx + 1;
+    %% 2-7) C/2 용량·SOH ---------------------------------------------------
+    if ~isempty(c2Idx)
+        for k = 1:min(numel(c2Idx),numel(Results))
+            s = c2Idx(k);
+            Cap = -trapz(data(s).time, data(s).I)/3600;   % Ah
+            Results(k).Cap_c2 = Cap;
+        end
+        refCap = Results(1).Cap_c2;
+        for k = 1:numel(Results)
+            if isfield(Results(k),'Cap_c2')
+                Results(k).SOH = Results(k).Cap_c2 / refCap;
+            else
+                Results(k).Cap_c2 = [];  Results(k).SOH = [];
+            end
+        end
+    else
+        [Results.Cap_c2] = deal([]);  [Results.SOH] = deal([]);
+    end
+
+    %% 2-8) Trip-별 SoC ----------------------------------------------------
+    for c = 1:numel(Results)
+        ocvTbl = Results(c).OCV;
+        if isempty(ocvTbl) || size(ocvTbl,2)<2
+            warning('   ▶ cyc %d : OCV 없음 → SoC 스킵',Results(c).cycle_num);
             continue;
         end
+        socFromV = @(v) interp1(ocvTbl(:,2), ocvTbl(:,1), v, 'linear','extrap');
+        prevEndVolt = NaN;  tripIdx = 1;
+        while true
+            fld = sprintf('Trips_%d',tripIdx);
+            if ~isfield(Results(c),fld), break; end
+            T = Results(c).(fld);  if isempty(T), tripIdx=tripIdx+1; continue; end
+            V = T(:,1);  I = T(:,2);  t = T(:,3);
 
-        V = T(:,1);
-        I = T(:,2);
-        t = T(:,3);
-
-        % 누적 전하 [A·s]
-        Idt = cumtrapz(t - t(1), I);
-
-        % 시작 SOC 결정
-        if tripIdx == 1
-            % 첫 Trip: 전압→SOC 테이블에서 보간
-            soc_begin = socFromV(V(1));
-        else
-            % 이후 Trip: 바로 이전 Trip의 마지막 SOC
-            soc_begin = prevSocEnd;
-        end
-
-        % 간단 쿨롱 카운팅 (배터리 전체 용량 사용)
-        socVec = soc_begin + Idt / Q_batt_As;
-
-        % 저장: [V, I, t, tRel, SOC]
-        Results(c).(fld) = [V, I, t, t - t(1), socVec];
-
-        % 다음 Trip을 위한 시작 SOC
-        prevSocEnd = socVec(end);
-        tripIdx = tripIdx + 1;
-    end
-end
-fprintf('▶ Trip‑wise SoC 계산 (간단 드라이빙 SOC) 완료\n');
-
-
-
-%% 10) cycle별 Voltage & SOC Figure ---------------------------------------
-nFigs_SOC = ceil(nCycles / plotsPerFig);
-cyclePtr  = 1;
-
-for figIdx = 1:nFigs_SOC
-    figS = figure('Name',sprintf('Volt_SOC_fig%02d',figIdx));
-    tiledlayout(subplotRows, subplotCols, 'Padding','compact');
-
-    for p = 1:plotsPerFig
-        if cyclePtr > nCycles, break; end
-        nexttile;
-
-        big = []; tB = []; vB = []; socB = [];
-        for k = 1:plotTripsMax
-            fld = sprintf('Trips_%d',k);
-            if isfield(Results(cyclePtr),fld) && ~isempty(Results(cyclePtr).(fld))
-                T   = Results(cyclePtr).(fld);            % [V I t tRel SOC]
-                big = [big ; T];                          %#ok<AGROW>
-                tB(end+1)   = T(end,3);
-                vB(end+1)   = T(end,1);
-                socB(end+1) = T(end,5);
+            % 시작 전압 → SOC0
+            if tripIdx == 1
+                nz = find(I~=0,1,'first');
+                if isempty(nz) || nz == 1
+                    volt0 = V(1);
+                else
+                    volt0 = V(nz-1);
+                end
+            else
+                volt0 = prevEndVolt;
             end
+            soc0 = socFromV(volt0);
+
+            % 적분 전하
+            Idt = cumtrapz(t,I);  Qtrip = Idt(end);
+
+            % 마지막 Trip 여부
+            nextFld = sprintf('Trips_%d',tripIdx+1);
+            isLast  = ~isfield(Results(c),nextFld) || isempty(Results(c).(nextFld));
+
+            if isLast
+                socVec = soc0 + Idt / Q_batt_As;
+            else
+                soc1 = socFromV(V(end));
+                if Qtrip == 0
+                    socVec = soc0 * ones(size(t));
+                else
+                    socVec = soc0 + (soc1 - soc0) .* (Idt / Qtrip);
+                end
+            end
+
+            Results(c).(fld) = [V, I, t, t - t(1), socVec];
+            prevEndVolt = V(end);  tripIdx = tripIdx + 1;
         end
-        if isempty(big), cyclePtr = cyclePtr + 1; continue; end
-
-        yyaxis left
-        plot(big(:,3), big(:,1), 'b-'); hold on;
-        plot(tB, vB, 'ko','MarkerFaceColor','w','MarkerSize',4);
-        ylabel('V  [V]');
-
-        yyaxis right
-        plot(big(:,3), big(:,5)*100, 'g-');
-        plot(tB, socB*100, 'ko','MarkerFaceColor','w','MarkerSize',4, ...
-             'HandleVisibility','off');
-        ylabel('SOC  [%]'); grid on; hold off;
-
-        title(sprintf('cyc %d', Results(cyclePtr).cycle_num));
-        xlabel('t [s]');
-        cyclePtr = cyclePtr + 1;
     end
-    sgtitle('Trip Voltage & SOC','FontWeight','bold');
 
-    exportgraphics(figS, fullfile(outDir, ...
-        sprintf('Volt_SOC_cycSet_%02d.png',figIdx)), 'Resolution',300);
+    %% 2-9) 그림(PNG) 저장 -------------------------------------------------
+    outDir = fullfile(outDirRoot,sprintf('cell%03d',cellID));
+    if ~exist(outDir,'dir'), mkdir(outDir); end
+
+    % (a) Full Current + markers
+    t_all = vertcat(data.time);  I_all = vertcat(data.I);
+    figFC = figure('visible','off');
+    plot(t_all,I_all,'b-'); grid on; hold on;
+    plot(arrayfun(@(i)data(i).time(1),drivingIdx),...
+         arrayfun(@(i)data(i).I(1),drivingIdx),'ro');
+    if ~isempty(ocvIdx)
+        plot(arrayfun(@(i)data(i).time(1),ocvIdx(1:numel(soc_ocv))),...
+             arrayfun(@(i)data(i).I(1),ocvIdx(1:numel(soc_ocv))),'bo');
+    end
+    if ~isempty(c2Idx)
+        plot(arrayfun(@(i)data(i).time(1),c2Idx),...
+             arrayfun(@(i)data(i).I(1),c2Idx),'go');
+    end
+    xlabel('t [s]'); ylabel('I [A]');
+    title(sprintf('cell %03d – Full Current',cellID));
+    exportgraphics(figFC,fullfile(outDir,'FullCurrent_Markers.png'),'Resolution',300);
+    close(figFC);
+
+    % (b) Cycle-별 Voltage/Current 그림
+    nCycles=numel(Results);  nFigs=ceil(nCycles/plotsPerFig);
+    subplotRows=ceil(plotsPerFig/subplotCols);  cyclePtr=1;
+    for fi = 1:nFigs
+        figC = figure('visible','off');
+        tiledlayout(subplotRows,subplotCols,'Padding','compact');
+        for p = 1:plotsPerFig
+            if cyclePtr > nCycles, break; end
+            nexttile;
+
+            big=[]; tB=[]; vB=[]; iB=[];
+            for k = 1:plotTripsMax
+                fld = sprintf('Trips_%d',k);
+                if isfield(Results(cyclePtr),fld)&&~isempty(Results(cyclePtr).(fld))
+                    T = Results(cyclePtr).(fld);
+                    big=[big;T];
+                    tB(end+1)=T(end,3);
+                    vB(end+1)=T(end,1);
+                    iB(end+1)=T(end,2);
+                end
+            end
+            if isempty(big), cyclePtr=cyclePtr+1; continue; end
+
+            yyaxis left
+            plot(big(:,3),big(:,1),'b-'); hold on;
+            plot(tB,vB,'ko','MarkerFaceColor','w','MarkerSize',4);
+            ylabel('V [V]');
+
+            yyaxis right
+            plot(big(:,3),big(:,2),'r-');
+            plot(tB,iB,'ko','MarkerFaceColor','w','MarkerSize',4,'HandleVisibility','off');
+            ylabel('I [A]'); grid on;
+            title(sprintf('cyc %d',Results(cyclePtr).cycle_num));
+            xlabel('t [s]');
+            cyclePtr=cyclePtr+1;
+        end
+        sgtitle(sprintf('cell %03d – Trip Parsing',cellID));
+        exportgraphics(figC,fullfile(outDir,sprintf('TripsVoltage_cycSet_%02d.png',fi)),...
+                       'Resolution',300);
+        close(figC);
+    end
+
+    %% 2-10) ResultsAll 에 누적 (필드 동기화) ------------------------------
+    if isempty(ResultsAll)
+        ResultsAll = Results;
+    else
+        fnAll = fieldnames(ResultsAll);
+        fnNew = fieldnames(Results);
+        for f=setdiff(fnNew,fnAll)',  [ResultsAll.(f{1})] = deal([]);  end
+        for f=setdiff(fnAll,fnNew)',  [Results.(f{1})]    = deal([]);  end
+        ResultsAll = [ResultsAll ; Results];   %#ok<AGROW>
+    end
+    fprintf('   ▶ cell %03d 저장 (Cycles=%d)\n',cellID,numel(Results));
 end
 
-%% 11) Trip 1‑5 SOC 예시 출력 & 그래프 ------------------------------------
-cycShow = 1;            % 확인할 cycle (Results 인덱스)
-maxShow = 6;            % Trip 1~5
-fprintf('\n▼ Example: cycle %d, Trip 1‑%d SOC summary\n', ...
-        Results(cycShow).cycle_num, maxShow);
-fprintf(' Trip  SOC0   SOC1   ΔSOC    Q_trip[A·s]\n');
-fprintf('-------------------------------------------\n');
-
-figE = figure('Name','Trip1‑5 SOC example'); hold on; grid on;
-colors = lines(maxShow);
-
-for tr = 1:maxShow
-    fld = sprintf('Trips_%d', tr);
-    if ~isfield(Results(cycShow), fld) || isempty(Results(cycShow).(fld)), break; end
-    
-    T       = Results(cycShow).(fld);
-    t       = T(:,3);
-    socVec  = T(:,5);        % SOC column
-    I       = T(:,2);
-    Idt     = cumtrapz(t - t(1), I);
-    Qtrip   = Idt(end);
-    
-    soc0 = socVec(1);   soc1 = socVec(end);
-    isLastFlag = tr==maxShow && ...
-                 (~isfield(Results(cycShow), sprintf('Trips_%d',tr+1)) || ...
-                  isempty(Results(cycShow).(sprintf('Trips_%d',tr+1))));
-    if isLastFlag, soc1 = NaN; end
-    
-    fprintf(' %2d   %5.3f  %5.3f  %6.3f   %10.1f\n', ...
-            tr, soc0, soc1, soc1-soc0, Qtrip);
-    
-    plot(t, socVec*100, '-', 'Color', colors(tr,:), ...
-         'DisplayName', sprintf('Trip %d',tr));
-end
-xlabel('t  [s]'); ylabel('SOC  [%]');
-title(sprintf('cycle %d  —  SOC profile of Trips 1‑%d', ...
-      Results(cycShow).cycle_num, maxShow));
-legend('Location','best'); hold off;
-
-exportgraphics(figE, fullfile(outDir, ...
-    sprintf('SOC_example_cycle%02d.png', Results(cycShow).cycle_num)), ...
-    'Resolution',300);
-
-%% 12) MAT 저장 ------------------------------------------------------------
-save('Results.mat','Results');
-fprintf('▶ 완료: Results.mat + PNG 파일들이 “%s” 폴더에 저장되었습니다.\n', ...
-        outDir);
+%% (3) 저장 ----------------------------------------------------------------
+save(fullfile(saveDir,'Results.mat'),'ResultsAll');
+fprintf('\n★★ 완료: Results.mat → "%s"\n',saveDir);
 
