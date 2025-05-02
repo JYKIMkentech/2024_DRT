@@ -50,7 +50,7 @@ gamma_est  = {};   % γ̂
 RMSE_V     = {};   % 전압-RMSE
 
 %% 3) main loop -----------------------------------------------------------
-for c = 1 %:nCycles
+for c = 2 %:nCycles
     cyc = Results(c).cycle_num;
     fprintf('=== Cycle %d (index %d/%d) ===\n', cyc, c, nCycles);
 
@@ -120,7 +120,7 @@ for c = 1 %:nCycles
         close(figVC);
 
         %% ---------- 그림 2) 전압 비교 0–100 s -----------------------------
-        figVZ = figure('Visible','off');
+        figVZ = figure('Visible','on');
         plot(tRel, V,     'k',  'LineWidth', 1.2); hold on
         plot(tRel, V_est, '--', 'LineWidth', 1.2);
         xlabel('t_{rel} [s]');  ylabel('Voltage [V]');
@@ -130,7 +130,7 @@ for c = 1 %:nCycles
         exportgraphics(figVZ, fullfile(figDir, ...
             sprintf('V_zoom_cyc%03d_trip%02d.png', cyc, tripIdx)), ...
             'Resolution', 300);
-        close(figVZ);
+        %close(figVZ);
 
         %% ---------- 그림 3) γ̂, 피크, FWHM -------------------------------
         figG = figure('Visible','on');  hold on;  grid on
