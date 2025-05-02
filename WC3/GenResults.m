@@ -141,7 +141,7 @@ for c = 1:nRes
 end
 
 %% 6a) C/2 스텝 용량(Ah) 계산 후 Results에 추가 -----------------------------
-nCap = 20;  % 앞 20개만
+nCap = length(ocvIdx) - 1;  % 앞 20개만
 if numel(c2Idx) < nCap, error('c2Idx가 %d개보다 적습니다.', nCap); end
 
 for k = 1:nCap
@@ -330,7 +330,7 @@ for figIdx=1:nFigs_SOC
 end
 
 %% 11) Trip 1-5 SOC 예시 출력 & 그래프 ------------------------------------
-cycShow = 1; maxShow = 6;
+cycShow = 3; maxShow = 6;
 fprintf('\n▼ Example: cycle %d, Trip 1-%d SOC summary\n', ...
         Results(cycShow).cycle_num, maxShow);
 fprintf(' Trip  SOC0   SOC1   ΔSOC    Q_trip[A·s]\n');

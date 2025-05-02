@@ -15,7 +15,7 @@ clc; clear; close all;
 %% USER SETTINGS ----------------------------------------------------------
 n            = 201;        % θ-grid size
 tau_max      = 2e4;        % τ_max [s]
-lambda_hat   = 1.17;       % ℓ₂-regularisation
+lambda_hat   = 1.17 ; %1.17;       % ℓ₂-regularisation
 Q_batt_Ah    = 5;          % capacity [Ah]
 num_bs       = 100;        % bootstrap repeats (기본값)
 pkPromMin    = 1e-3;       % MinPeakProminence [Ω]
@@ -50,7 +50,7 @@ gamma_est  = {};   % γ̂
 RMSE_V     = {};   % 전압-RMSE
 
 %% 3) main loop -----------------------------------------------------------
-for c = 2 %:nCycles
+for c = 5 %:nCycles
     cyc = Results(c).cycle_num;
     fprintf('=== Cycle %d (index %d/%d) ===\n', cyc, c, nCycles);
 
@@ -185,11 +185,11 @@ for c = 2 %:nCycles
     end
 end
 
-%% 4) save ---------------------------------------------------------------
-DRTresults = Results;  
-save(fullfile(drtDir,'DRTresults.mat'), ...
-     'DRTresults','gamma_est','RMSE_V','-v7.3');
-
-fprintf('\n▶ 완료:  %s  에  DRTresults.mat 및 모든 그림 저장 완료\n', drtDir);
-disp('Run_DRT_from_Results: complete.');
+% %% 4) save ---------------------------------------------------------------
+% DRTresults = Results;  
+% save(fullfile(drtDir,'DRTresults.mat'), ...
+%      'DRTresults','gamma_est','RMSE_V','-v7.3');
+% 
+% fprintf('\n▶ 완료:  %s  에  DRTresults.mat 및 모든 그림 저장 완료\n', drtDir);
+% disp('Run_DRT_from_Results: complete.');
 
