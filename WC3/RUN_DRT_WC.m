@@ -50,7 +50,7 @@ gamma_est  = {};   % γ̂
 RMSE_V     = {};   % 전압-RMSE
 
 %% 3) main loop -----------------------------------------------------------
-for c = 5 %:nCycles
+for c = 4 %:nCycles
     cyc = Results(c).cycle_num;
     fprintf('=== Cycle %d (index %d/%d) ===\n', cyc, c, nCycles);
 

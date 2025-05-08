@@ -52,7 +52,6 @@ c2Idx = c2Idx(arrayfun(@(i) numel(data(i).time) >= minC2Points, c2Idx));
 soc_ocv_cell   = cell(numel(ocvIdx),1);
 isDischargeOCV = target_C < 0; 
 
-
 for k = 1:numel(ocvIdx)
     s = ocvIdx(k);
     t = data(s).time;
