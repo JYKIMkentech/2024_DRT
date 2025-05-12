@@ -1,13 +1,14 @@
 %% analyze_drive_folder.m
 % -------------------------------------------------------------------------
-%  Audi Drive 데이터 (Raw.mat)
+%  Audi Drive 데이터 (Raw.mat)
 %  • 전류 / 전압 / SoC 시각화
 %  • Δt‑jump(>500 s) 기준 Trip 경계 표시
-%  • PreParseResults.mat  : 모든 Trip(1–N) 저장
-%    ParseResults.mat     : 조건 충족 Trip만 저장
-%    RefSOC.mat           : SoC 레퍼런스
-% -------------------------------------------------------------------------
-%  조건 (ParseResults 선별용)
+%
+%  • PreParseResults.mat : DrivingNum + Trip1~N (모든 Trip 저장)
+%  • ParseResults.mat    : DrivingNum + Trip1~N (조건 충족 Trip만 저장)
+%  • RefSOC.mat          : SoC 레퍼런스
+%
+%  Trip 선별 조건
 %    ① duration ≥ 1000 s
 %    ② ΔSoC    < 10 %
 %    ③ min(socStart,socEnd) ≥ 20 %
@@ -112,18 +113,27 @@ for xb = tBoundSort.'
 end
 legend({'SoC','Boundaries'}, 'Location','best');
 
-%% 11) 모든 Trip → PreParseResults 저장 -----------------------------------
-savePath = fullfile(basePath, 'ParseResult');
-if ~exist(savePath,'dir'), mkdir(savePath); end
+%% 11) 모든 Trip → PreParseResults 구조체 생성/저장 ------------------------
+saveDir = fullfile(basePath,'ParseResult');
+if ~exist(saveDir,'dir'), mkdir(saveDir); end
 
-PreParseResults = struct();
-for k = 1:numTrips
-    idxs = startIdxs(k):endIdxs(k);
-    PreParseResults.(sprintf('Trip%d',k)) = [V(idxs) I(idxs) tCurr(idxs)];
+% ── (a) 1×1 구조체 생성 ---------------------------------------------------
+PreParseResults            = struct();
+PreParseResults.DrivingNum = folderNum;   % ‘2’ 한 칸만 표시
+
+% ── (b) Trip 데이터를 Trip1·Trip2 … 필드로 추가 --------------------------
+for kk = 1:numTrips
+    idx = startIdxs(kk):endIdxs(kk);
+    PreParseResults.(sprintf('Trip%d',kk)) = [V(idx)  I(idx)  tCurr(idx)];
 end
-save(fullfile(savePath,'PreParseResults.mat'), 'PreParseResults');
+
+% ── (c) RefSOC 구조체 ----------------------------------------------------
 RefSOC = struct('timeSOC', tSoC, 'soc', soc);
-save(fullfile(savePath,'RefSOC.mat'), 'RefSOC');
+
+% ── (d) 저장 -------------------------------------------------------------
+save(fullfile(saveDir,'PreParseResults.mat'),'PreParseResults');
+save(fullfile(saveDir,'RefSOC.mat'),          'RefSOC');
+
 
 %% 12) Trip별 ΔSoC · Duration · Range · ΔI 계산/표시 -----------------------
 fprintf('\n===== Trip별 ΔSoC & Duration & SOC Range & ΔI =====\n');
@@ -181,26 +191,29 @@ for k = 1:numTrips
         'FontSize',8,'Color',[0.1 0.1 0.1]);
 end
 
-%% 13) 후보 Trip 선택 & ParseResults 저장 ---------------------------------
+%% 13) 조건 통과 Trip만 → ParseResults 구조체 생성/저장 --------------------
 isCand = (duration >= 1000) & ...
          (deltaSoc  < 10)   & ...
          (min(socStart,socEnd) >= 20) & ...
          (deltaI    >= 100);
-
 candTrips = find(isCand);
 fprintf('\n=== 선택된 Trip (조건 충족) : %s ===\n', mat2str(candTrips));
 
-ParseResults = struct();
-for ii = 1:numel(candTrips)
-    k   = candTrips(ii);
-    idx = startIdxs(k):endIdxs(k);
-    ParseResults.(sprintf('Trip%d',k)) = [V(idx) I(idx) tCurr(idx)];
-end
-save(fullfile(savePath,'ParseResults.mat'), 'ParseResults');
+% ── (a) 1×1 구조체 생성 ---------------------------------------------------
+ParseResults            = struct();
+ParseResults.DrivingNum = folderNum;
 
-fprintf('\nPreParseResults.mat  (전체 %d개 Trip)\n', numTrips);
-fprintf('ParseResults.mat     (조건 충족 %d개 Trip) 을 %s 에 저장했습니다.\n', ...
-        numel(candTrips), savePath);
+% ── (b) Trip 데이터를 필드로 추가 ---------------------------------------
+for kk = candTrips(:).'
+    idx = startIdxs(kk):endIdxs(kk);
+    ParseResults.(sprintf('Trip%d',kk)) = [V(idx)  I(idx)  tCurr(idx)];
+end
+
+% ── (c) 저장 -------------------------------------------------------------
+save(fullfile(saveDir,'ParseResults.mat'),'ParseResults');
+
+fprintf('\nPreParseResults.mat  → Trip %d개 필드 포함\n', numTrips);
+fprintf('ParseResults.mat     → 조건 충족 Trip %d개 필드 포함\n', numel(candTrips));
 
 
 

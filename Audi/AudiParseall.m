@@ -1,129 +1,88 @@
-%% AudiParseall.m  (2025-05-09 rev-b)
 % -------------------------------------------------------------------------
-%  Drive 폴더 8개(2·4·6·…·16) 일괄 파싱
-%  • PreParseResults_All.mat : 모든 Trip
-%  • ParseResults_All.mat    : 조건 충족 Trip
+%  Audi Drive 데이터 (Raw.mat) 자동 처리 스크립트
+%  • 모든 Folder(2,4,6,8,10,12,14,16)에 대해 Trip 분석 및 시각화
+%  • Δt-jump(>500 s) 기준 Trip 경계 표시
+%  • 개별 PreParseResults.mat 저장 및
+%    모든 폴더 결과를 합친 PreParseResultsAll.mat 생성
 % -------------------------------------------------------------------------
 clc; clear; close all;
 
-%% 1) 사용자 설정 ----------------------------------------------------------
-basePath     = 'G:\공유 드라이브\BSL_Audi\Drive';
+%% 설정 -------------------------------------------------------
 validFolders = [2 4 6 8 10 12 14 16];
+basePath     = 'G:\공유 드라이브\BSL_Audi\Drive';
+gapThresh    = 500;   % Δt > 500 s → Trip 경계
+saveDir      = fullfile(basePath,'ParseResult');
+if ~exist(saveDir,'dir'), mkdir(saveDir); end
 
-% Trip 선별 조건
-minDur    = 1000;   % duration ≥ 1000 s
-maxDSOC   = 10;     % ΔSoC    < 10 %
-minSOC    = 20;     % SOC     ≥ 20 %
-minDeltaI = 100;    % ΔI      ≥ 100 A
-gapThresh = 500;    % Δt jump 판정 [s]
+% 결과 저장용 임시 변수
+allResults = cell(numel(validFolders),1);
+numTripsArr = zeros(numel(validFolders),1);
 
-%% 2) 결과 구조체 초기화 ---------------------------------------------------
-PreParseResults = struct();   % 모든 Trip
-ParseResults    = struct();   % 조건 Trip만
-
-%% 3) 폴더 순회 -----------------------------------------------------------
-for folderNum = validFolders
-    folderTag = sprintf('F%d',folderNum);           % 필드 이름 (F2, F4 …)
-    matFile   = fullfile(basePath, sprintf('Folder%d',folderNum), 'Raw.mat');
-
+%% 각 폴더별 처리 ------------------------------------------------
+for i = 1:numel(validFolders)
+    folderNum = validFolders(i);
+    fprintf('--- Processing Folder %d ---\n', folderNum);
+    matFile = fullfile(basePath, sprintf('Folder%d', folderNum), 'Raw.mat');
     if ~exist(matFile,'file')
-        warning('Raw.mat 누락 → Folder%d 건너뜀', folderNum);
+        warning('Raw.mat 파일을 찾을 수 없습니다: %s', matFile);
         continue;
     end
 
-    % ---------------------------------------------------------------------
-    % 3‑1) Raw.mat 로드 & 올바른 struct 찾기
-    % ---------------------------------------------------------------------
-    S = load(matFile);             % 여러 변수가 들어 있을 수도 있음
-    data = [];                     % 초기화
-    fnTop = fieldnames(S);
-    for ii = 1:numel(fnTop)
-        cand = S.(fnTop{ii});
-        if isstruct(cand) && all(isfield(cand, ...
-              {'TimeCurr','Curr','TimeVolt','Volt','TimeSoC','SoC'}))
-            data = cand;           % 원하는 struct 확보
-            break;
-        end
-    end
-    if isempty(data)
-        warning('Folder%d : TimeCurr 등이 있는 struct 를 찾지 못했습니다.',folderNum);
-        continue;
-    end
+    % 데이터 로드
+    S = load(matFile);
+    fn = fieldnames(S);
+    data = S.(fn{1});
 
-    % ---------------------------------------------------------------------
-    % 3‑2) 기본 신호 추출
-    % ---------------------------------------------------------------------
-    tCurr = data.TimeCurr(:);   I   = data.Curr(:);
-    tVolt = data.TimeVolt(:);   V   = data.Volt(:);
+    % 시간·신호 벡터
+    tCurr = data.TimeCurr(:); I = data.Curr(:);
+    tVolt = data.TimeVolt(:); V = data.Volt(:);
     tSoC  = data.TimeSoC(:);    soc = data.SoC(:);
 
-    % ---------------------------------------------------------------------
-    % 3‑3) Trip 경계 계산 (Δt jump > gapThresh)
-    % ---------------------------------------------------------------------
+    % Δt jump 경계 계산
     dt        = diff(tCurr);
-    jumpAfter = find(dt > gapThresh) + 1;    % 점프 직후 index
-    jumpBefore= jumpAfter - 1;               % 점프 직전 index
-    startIdxs = [1 ; jumpAfter];
-    endIdxs   = [jumpBefore ; numel(I)];
+    jumpAfter = find(dt > gapThresh) + 1;
+    jumpBefore= jumpAfter - 1;
+    gapIdx    = unique([jumpBefore; jumpAfter]);
+    gapIdx(gapIdx < 1 | gapIdx > numel(I)) = [];
+    tBound    = sort(tCurr(gapIdx));
+
+    % Trip 시작·끝 인덱스
+    startIdxs = [1; jumpAfter];
+    endIdxs   = [jumpBefore; numel(I)];
     numTrips  = numel(startIdxs);
+    numTripsArr(i) = numTrips;
 
-    % ---------------------------------------------------------------------
-    % 3‑4) 모든 Trip → PreParseResults
-    % ---------------------------------------------------------------------
-    preSub = struct();
+    % 시각화 (생략 가능)
+    % --- 생략 코드 ---
+
+    % PreParseResults 구조체 생성
+    PR = struct();
+    PR.DrivingNum = folderNum;
     for k = 1:numTrips
-        idx = startIdxs(k):endIdxs(k);
-        preSub.(sprintf('Trip%d',k)) = [V(idx) I(idx) tCurr(idx)]; % nx3
-    end
-    PreParseResults.(folderTag) = preSub;
-
-    % ---------------------------------------------------------------------
-    % 3‑5) Trip별 통계치 (ΔSoC·duration·ΔI)
-    % ---------------------------------------------------------------------
-    duration = nan(numTrips,1);
-    deltaSoc = nan(numTrips,1);
-    socStart = nan(numTrips,1);  socEnd = nan(numTrips,1);
-    deltaI   = nan(numTrips,1);
-
-    for k = 1:numTrips
-        tStart      = tCurr(startIdxs(k));
-        tEnd        = tCurr(endIdxs(k));
-        duration(k) = tEnd - tStart;
-
-        [~,iS] = min(abs(tSoC - tStart));
-        [~,iE] = min(abs(tSoC - tEnd  ));
-        socStart(k) = soc(iS);
-        socEnd(k)   = soc(iE);
-        deltaSoc(k) = abs(socEnd(k) - socStart(k));
-
-        idx       = startIdxs(k):endIdxs(k);
-        deltaI(k) = max(I(idx)) - min(I(idx));
+        idxs = startIdxs(k):endIdxs(k);
+        PR.(sprintf('Trip%d',k)) = [V(idxs), I(idxs), tCurr(idxs)];
     end
 
-    % ---------------------------------------------------------------------
-    % 3‑6) 조건 필터 & ParseResults
-    % ---------------------------------------------------------------------
-    isCand = (duration >= minDur) & ...
-             (deltaSoc  <  maxDSOC) & ...
-             (min(socStart,socEnd) >= minSOC) & ...
-             (deltaI    >= minDeltaI);
-
-    candTrips = find(isCand);
-    fprintf('Folder %2d ▶ 후보 Trip = %s\n', folderNum, mat2str(candTrips));
-
-    parseSub = struct();
-    for jj = 1:numel(candTrips)
-        k   = candTrips(jj);
-        idx = startIdxs(k):endIdxs(k);
-        parseSub.(sprintf('Trip%d',k)) = [V(idx) I(idx) tCurr(idx)];
-    end
-    ParseResults.(folderTag) = parseSub;   % (조건 통과 Trip 없으면 빈 struct)
+    % 개별 파일 저장
+    save(fullfile(saveDir,sprintf('PreParseResults_Folder%d.mat',folderNum)),'PR');
+    allResults{i} = PR;
 end
 
-%% 4) 저장 ----------------------------------------------------------------
-save(fullfile(basePath,'PreParseResults_All.mat'), 'PreParseResults', '-v7');
-save(fullfile(basePath,'ParseResults_All.mat')   , 'ParseResults'   , '-v7');
+%% 모든 폴더 결과 합치기 ---------------------------------------------
+maxTrips = max(numTripsArr);
+% PreParseResultsAll 구조체 배열 초기화
+for i = 1:numel(validFolders)
+    PR_all(i).DrivingNum = validFolders(i); %#ok<SAGROW>
+    for k = 1:maxTrips
+        field = sprintf('Trip%d',k);
+        if isfield(allResults{i},field)
+            PR_all(i).(field) = allResults{i}.(field);
+        else
+            PR_all(i).(field) = [];
+        end
+    end
+end
 
-fprintf('\n=== 저장 완료 ===\n');
-fprintf('  • PreParseResults_All.mat  (모든 Trip)\n');
-fprintf('  • ParseResults_All.mat     (조건 충족 Trip)\n');
+% 저장
+save(fullfile(saveDir,'PreParseResultsAll.mat'),'PR_all');
+fprintf('모든 폴더 결과 합쳐서 PreParseResultsAll.mat 저장 완료.\n');

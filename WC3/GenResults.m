@@ -330,36 +330,37 @@ for figIdx=1:nFigs_SOC
         sprintf('Volt_SOC_cycSet_%02d.png',figIdx)),'Resolution',300);
 end
 
-%% 11) Trip 1-5 SOC 예시 출력 & 그래프 ------------------------------------
-cycShow = 3; maxShow = 6;
-fprintf('\n▼ Example: cycle %d, Trip 1-%d SOC summary\n', ...
-        Results(cycShow).cycle_num, maxShow);
-fprintf(' Trip  SOC0   SOC1   ΔSOC    Q_trip[A·s]\n');
-fprintf('-------------------------------------------\n');
+%% 11) 모든 Trip → PreParseResults 구조체 배열 생성/저장 -------------------
+saveDir = fullfile(basePath,'ParseResult');
+if ~exist(saveDir,'dir'), mkdir(saveDir); end
 
-figE = figure('Name','Trip1-5 SOC example'); hold on; grid on;
-colors = lines(maxShow);
-for tr=1:maxShow
-    fld=sprintf('Trips_%d',tr);
-    if ~isfield(Results(cycShow),fld)||isempty(Results(cycShow).(fld)), break; end
-    T      = Results(cycShow).(fld);
-    t      = T(:,3); socVec = T(:,5);
-    I      = T(:,2);
-    Idt    = cumtrapz(t-t(1),I);
-    Qtrip  = Idt(end);
-    soc0   = socVec(1); soc1 = socVec(end);
-    isLast = tr==maxShow && (~isfield(Results(cycShow),sprintf('Trips_%d',tr+1)) ...
-               || isempty(Results(cycShow).(sprintf('Trips_%d',tr+1))));
-    if isLast, soc1 = NaN; end
-    fprintf(' %2d   %5.3f  %5.3f  %6.3f   %10.1f\n',tr,soc0,soc1,soc1-soc0,Qtrip);
-    plot(t,socVec*100,'-','Color',colors(tr,:),'DisplayName',sprintf('Trip %d',tr));
+nElem = numTrips + 1;                         % DrivingNum + Trip 개수
+PreParseResults = repmat(struct( ...         % 모든 필드 미리 선언
+    'DrivingNum', [], ...                    % 폴더 번호
+    'TripName',   '', ...                    % 'Trip_#' 텍스트
+    'Data',       []  ...                    % [V I t] 행렬
+), 1, nElem);
+
+% ── (a) element #1 : DrivingNum -----------------------------------------
+PreParseResults(1).DrivingNum = folderNum;
+PreParseResults(1).TripName   = 'DrivingNum';
+
+% ── (b) element #2~N+1 : Trip 데이터 ------------------------------------
+for kk = 1:numTrips
+    idx = startIdxs(kk):endIdxs(kk);
+
+    PreParseResults(kk+1).DrivingNum = [];   % 다른 요소와 field 맞춤
+    PreParseResults(kk+1).TripName   = sprintf('Trip_%d',kk);
+    PreParseResults(kk+1).Data       = [V(idx)  I(idx)  tCurr(idx)];
 end
-xlabel('t  [s]'); ylabel('SOC  [%]');
-title(sprintf('cycle %d  —  SOC profile of Trips 1-%d', ...
-      Results(cycShow).cycle_num, maxShow));
-legend('Location','best');
-exportgraphics(figE,fullfile(outDir, ...
-    sprintf('SOC_example_cycle%02d.png',Results(cycShow).cycle_num)),'Resolution',300);
+
+% ── (c) RefSOC 구조체 ----------------------------------------------------
+RefSOC = struct('timeSOC', tSoC, 'soc', soc);
+
+% ── (d) 저장 -------------------------------------------------------------
+save(fullfile(saveDir,'PreParseResults.mat'),'PreParseResults');
+save(fullfile(saveDir,'RefSOC.mat'),          'RefSOC');
+
 
 %% 12) MAT 저장 ------------------------------------------------------------
 saveDir = 'G:\공유 드라이브\Battery Software Lab\Projects\DRT\WC_DRT\PreResults';
