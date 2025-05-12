@@ -114,26 +114,24 @@ end
 legend({'SoC','Boundaries'}, 'Location','best');
 
 %% 11) 모든 Trip → PreParseResults 구조체 생성/저장 ------------------------
-saveDir = fullfile(basePath,'ParseResult');
-if ~exist(saveDir,'dir'), mkdir(saveDir); end
-
-% ── (a) 1×1 구조체 생성 ---------------------------------------------------
+% (a) PreParseResults 생성
 PreParseResults            = struct();
-PreParseResults.DrivingNum = folderNum;   % ‘2’ 한 칸만 표시
-
-% ── (b) Trip 데이터를 Trip1·Trip2 … 필드로 추가 --------------------------
+PreParseResults.DrivingNum = folderNum;
 for kk = 1:numTrips
     idx = startIdxs(kk):endIdxs(kk);
-    PreParseResults.(sprintf('Trip%d',kk)) = [V(idx)  I(idx)  tCurr(idx)];
+    PreParseResults.(sprintf('Trip%d',kk)) = [V(idx), I(idx), tCurr(idx)];
 end
 
-% ── (c) RefSOC 구조체 ----------------------------------------------------
+% (b) RefSOC 생성
 RefSOC = struct('timeSOC', tSoC, 'soc', soc);
 
-% ── (d) 저장 -------------------------------------------------------------
-save(fullfile(saveDir,'PreParseResults.mat'),'PreParseResults');
-save(fullfile(saveDir,'RefSOC.mat'),          'RefSOC');
-
+% (c) 해당 Folder 내부에 저장
+outputDir = fullfile(basePath, sprintf('Folder%d', folderNum));
+if ~exist(outputDir,'dir')
+    mkdir(outputDir);
+end
+save(fullfile(outputDir, sprintf('PreParseResults%d.mat', folderNum)), 'PreParseResults');
+save(fullfile(outputDir, sprintf('RefSOC%d.mat',           folderNum)), 'RefSOC');
 
 %% 12) Trip별 ΔSoC · Duration · Range · ΔI 계산/표시 -----------------------
 fprintf('\n===== Trip별 ΔSoC & Duration & SOC Range & ΔI =====\n');
@@ -192,28 +190,46 @@ for k = 1:numTrips
 end
 
 %% 13) 조건 통과 Trip만 → ParseResults 구조체 생성/저장 --------------------
-isCand = (duration >= 1000) & ...
-         (deltaSoc  < 10)   & ...
-         (min(socStart,socEnd) >= 20) & ...
-         (deltaI    >= 100);
+% (a) 조건 필터링
+isCand   = (duration >= 1000)             & ...
+           (deltaSoc  < 10)               & ...
+           (min([socStart,socEnd],[],2) >= 20) & ...
+           (deltaI    >= 100);
 candTrips = find(isCand);
-fprintf('\n=== 선택된 Trip (조건 충족) : %s ===\n', mat2str(candTrips));
 
-% ── (a) 1×1 구조체 생성 ---------------------------------------------------
+% (b) 선택된 Trip 번호 display
+disp(['=== 선택된 Trip 번호: ', num2str(candTrips'), ' ===']);
+
+% (c) ParseResults 생성
 ParseResults            = struct();
 ParseResults.DrivingNum = folderNum;
-
-% ── (b) Trip 데이터를 필드로 추가 ---------------------------------------
 for kk = candTrips(:).'
     idx = startIdxs(kk):endIdxs(kk);
-    ParseResults.(sprintf('Trip%d',kk)) = [V(idx)  I(idx)  tCurr(idx)];
+    ParseResults.(sprintf('Trip%d',kk)) = [V(idx), I(idx), tCurr(idx)];
 end
 
-% ── (c) 저장 -------------------------------------------------------------
-save(fullfile(saveDir,'ParseResults.mat'),'ParseResults');
-
-fprintf('\nPreParseResults.mat  → Trip %d개 필드 포함\n', numTrips);
-fprintf('ParseResults.mat     → 조건 충족 Trip %d개 필드 포함\n', numel(candTrips));
+% (d) ParseResults 저장
+save(fullfile(outputDir, sprintf('ParseResults%d.mat', folderNum)), 'ParseResults');
 
 
-
+%% 14) 선택된 Trip 전류·전압 plot (yyaxis 사용) ---------------------------
+for kk = candTrips(:).'
+    idx = startIdxs(kk):endIdxs(kk);
+    t = tCurr(idx);
+    Iseg = I(idx);
+    Vseg = V(idx);
+    
+    figure('Name', sprintf('Folder %d – Trip %d: I & V', folderNum, kk));
+    
+    yyaxis left
+    plot(t, Iseg, 'LineWidth',1.2);
+    ylabel('Current [A]');
+    
+    yyaxis right
+    plot(t, Vseg, 'LineWidth',1.2);
+    ylabel('Voltage [V]');
+    
+    xlabel('Time [s]');
+    title(sprintf('Folder %d – Trip %d: Current & Voltage vs Time', folderNum, kk));
+    grid on;
+end
