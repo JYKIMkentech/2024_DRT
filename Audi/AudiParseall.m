@@ -127,5 +127,3 @@ save(fullfile(basePath,'ParseResults_All.mat')   , 'ParseResults'   , '-v7');
 fprintf('\n=== 저장 완료 ===\n');
 fprintf('  • PreParseResults_All.mat  (모든 Trip)\n');
 fprintf('  • ParseResults_All.mat     (조건 충족 Trip)\n');
-
-c
