@@ -8,6 +8,8 @@
 %  • ParseResults.mat    : DrivingNum + Trip1~N (조건 충족 Trip만 저장)
 %  • RefSOC.mat          : SoC 레퍼런스
 %
+%  • TempData.mat        : TimeTemp + Temp 저장
+%
 %  Trip 선별 조건
 %    ① duration ≥ 1000 s
 %    ② ΔSoC    < 10 %
@@ -32,14 +34,29 @@ if ~exist(matFile,'file')
 end
 
 %% 2) 데이터 로드 ----------------------------------------------------------
-load(matFile);                       % Raw.mat 안에는 struct 하나
+load(matFile);  % Raw.mat 안에는 struct 하나
 varsInMat = whos;
 data      = eval(varsInMat(find(strcmp({varsInMat.class},'struct'),1)).name);
 
 %% 3) 필드 추출 ------------------------------------------------------------
-tCurr = data.TimeCurr(:);   I   = data.Curr(:);
-tVolt = data.TimeVolt(:);   V   = data.Volt(:);
-tSoC  = data.TimeSoC(:);    soc = data.SoC(:);
+% Current
+tCurr = data.TimeCurr(:);
+I     = data.Curr(:);
+% Voltage
+tVolt = data.TimeVolt(:);
+V     = data.Volt(:);
+% SoC
+tSoC  = data.TimeSoC(:);
+soc   = data.SoC(:);
+% Temperature (추가)
+if isfield(data,'TimeTemp') && isfield(data,'Temp')
+    tTemp = data.TimeTemp(:);
+    temp  = data.Temp(:);
+else
+    warning('온도 필드가 존재하지 않습니다.');
+    tTemp = [];
+    temp  = [];
+end
 
 %% 4) 전류 플롯 ------------------------------------------------------------
 figCurr = figure('Name', sprintf('Current – Folder %d', folderNum));
@@ -58,84 +75,58 @@ xlabel('Time [s]'); ylabel('Voltage [V]'); title('Pack Voltage');
 
 %% 7) Δt jump 경계 계산 ----------------------------------------------------
 dt        = diff(tCurr);
-gapThresh = 500;                      % Δt > 500 s → 경계
-jumpAfter = find(dt > gapThresh) + 1; % 점프 직후 index
-jumpBefore= jumpAfter - 1;            % 점프 직전 index
+gapThresh = 500;                       % Δt > 500 s → 경계
+jumpAfter = find(dt > gapThresh) + 1;  % 점프 직후 index
+jumpBefore= jumpAfter - 1;             % 점프 직전 index
 gapIdx    = unique([jumpBefore; jumpAfter]);
 gapIdx(gapIdx < 1 | gapIdx > numel(I)) = [];
 tBound    = tCurr(gapIdx);
+
+% Trip 경계 인덱스
+startIdxs = [1; jumpAfter];
+endIdxs   = [jumpBefore; numel(I)];
+numTrips  = numel(startIdxs);
 
 %% 8) Trip 경계 시각화 (Current) ------------------------------------------
 figure(figCurr); hold on;
 ylC = ylim;
 scatter(tCurr(gapIdx), I(gapIdx), 60, 'r', 'filled');
-tBoundSort = sort(tBound);
-for xb = tBoundSort.'
+for xb = sort(tBound).'
     plot([xb xb], ylC, 'k--', 'LineWidth', 0.8);
 end
-startIdxs = [1; jumpAfter];
-endIdxs   = [jumpBefore; numel(I)];
-numTrips  = numel(startIdxs);
+% Trip 라벨링
 for k = 1:numTrips
     mid_t = (tCurr(startIdxs(k)) + tCurr(endIdxs(k))) / 2;
     mid_y = ylC(1) + 0.05*(ylC(2)-ylC(1));
-    text(mid_t, mid_y, sprintf('Trip %d', k), ...
-        'HorizontalAlignment','center', 'VerticalAlignment','bottom', ...
-        'FontWeight','bold', 'Color','k');
+    text(mid_t, mid_y, sprintf('Trip %d', k), 'HorizontalAlignment','center', 'FontWeight','bold');
 end
 legend({'Current','Boundaries'}, 'Location','best');
 
 %% 9) Trip 경계 시각화 (Voltage) ------------------------------------------
 figure(figVolt); hold on;
 ylV = ylim;
-scatter(tBoundSort, V(gapIdx), 60, 'r', 'filled');
-for xb = tBoundSort.'
+scatter(tCurr(gapIdx), V(gapIdx), 60, 'r', 'filled');
+for xb = sort(tBound).'
     plot([xb xb], ylV, 'k--', 'LineWidth', 0.8);
 end
 for k = 1:numTrips
     mid_t = (tCurr(startIdxs(k)) + tCurr(endIdxs(k))) / 2;
     mid_y = ylV(1) + 0.05*(ylV(2)-ylV(1));
-    text(mid_t, mid_y, sprintf('Trip %d', k), ...
-        'HorizontalAlignment','center', 'VerticalAlignment','bottom', ...
-        'FontWeight','bold', 'Color','k');
+    text(mid_t, mid_y, sprintf('Trip %d', k), 'HorizontalAlignment','center', 'FontWeight','bold');
 end
 legend({'Voltage','Boundaries'}, 'Location','best');
 
 %% 10) Trip 경계 시각화 (SoC) ---------------------------------------------
 figure(figSoC); hold on;
 ylS = ylim;
-closestSoCIdx = arrayfun(@(tb) ...
-    find(abs(tSoC - tb) == min(abs(tSoC - tb)), 1, 'first'), ...
-    tBoundSort);
+closestSoCIdx = arrayfun(@(tb) find(abs(tSoC-tb)==min(abs(tSoC-tb)),1), sort(tBound));
 scatter(tSoC(closestSoCIdx), soc(closestSoCIdx), 60, 'r', 'filled');
-for xb = tBoundSort.'
+for xb = sort(tBound).'
     plot([xb xb], ylS, 'k--', 'LineWidth', 0.8);
 end
 legend({'SoC','Boundaries'}, 'Location','best');
 
-%% 11) 모든 Trip → PreParseResults 구조체 생성/저장 ------------------------
-% (a) PreParseResults 생성
-PreParseResults            = struct();
-PreParseResults.DrivingNum = folderNum;
-for kk = 1:numTrips
-    idx = startIdxs(kk):endIdxs(kk);
-    PreParseResults.(sprintf('Trip%d',kk)) = [V(idx), I(idx), tCurr(idx)];
-end
-
-% (b) RefSOC 생성
-RefSOC = struct('timeSOC', tSoC, 'soc', soc);
-
-% (c) 해당 Folder 내부에 저장
-outputDir = fullfile(basePath, sprintf('Folder%d', folderNum));
-if ~exist(outputDir,'dir')
-    mkdir(outputDir);
-end
-save(fullfile(outputDir, sprintf('PreParseResults%d.mat', folderNum)), 'PreParseResults');
-save(fullfile(outputDir, sprintf('RefSOC%d.mat',           folderNum)), 'RefSOC');
-
-%% 12) Trip별 ΔSoC · Duration · Range · ΔI 계산/표시 -----------------------
-fprintf('\n===== Trip별 ΔSoC & Duration & SOC Range & ΔI =====\n');
-figure(figSoC); hold on;
+%% 11) Trip별 ΔSoC · Duration · Range · ΔI 계산/표시 -----------------------
 
 deltaSoc  = NaN(numTrips,1);
 duration  = NaN(numTrips,1);
@@ -144,92 +135,61 @@ socEnd    = NaN(numTrips,1);
 deltaI    = NaN(numTrips,1);
 
 for k = 1:numTrips
-    % (a) 시간 구간
-    tStart      = tCurr(startIdxs(k));
-    tEnd        = tCurr(endIdxs(k));
-    duration(k) = tEnd - tStart;          % [s]
+    % 시간 구간
+    tStart = tCurr(startIdxs(k));
+    tEnd   = tCurr(endIdxs(k));
+    duration(k) = tEnd - tStart;
 
-    % (b) 시작·종료 SoC
-    [~,idxStart] = min(abs(tSoC - tStart));
-    [~,idxEnd  ] = min(abs(tSoC - tEnd  ));
-    socStart(k)  = soc(idxStart);
-    socEnd(k)    = soc(idxEnd);
-    deltaSoc(k)  = abs(socEnd(k) - socStart(k));    % ΔSoC [%]
+    % SoC 추출
+    [~,i1] = min(abs(tSoC-tStart)); socStart(k) = soc(i1);
+    [~,i2] = min(abs(tSoC-tEnd));   socEnd(k)   = soc(i2);
+    deltaSoc(k)= abs(socEnd(k)-socStart(k));
 
-    % (c) 전류 변동 크기
-    idxs      = startIdxs(k):endIdxs(k);
-    deltaI(k) = max(I(idxs)) - min(I(idxs));        % ΔI [A]
+    % ΔI 계산
+    idx = startIdxs(k):endIdxs(k);
+    deltaI(k) = max(I(idx)) - min(I(idx));
 
-    % (d) 콘솔 출력
-    fprintf('Trip %2d : ΔSoC = %6.2f %% , Dur = %6.0f s , Range = %6.2f–%6.2f %% , ΔI = %7.2f A\n', ...
-            k, deltaSoc(k), duration(k), socEnd(k), socStart(k), deltaI(k));
-
-    % (e) SoC 그래프 라벨
-    mid_t = (tStart + tEnd)/2;
-    y1 = ylS(1) + 0.05*(ylS(2)-ylS(1));  % Trip 번호
-    y2 = ylS(1) + 0.12*(ylS(2)-ylS(1));  % ΔSoC
-    y3 = ylS(1) + 0.19*(ylS(2)-ylS(1));  % Duration
-    y4 = ylS(1) + 0.26*(ylS(2)-ylS(1));  % Range
-    y5 = ylS(1) + 0.33*(ylS(2)-ylS(1));  % ΔI
-
-    text(mid_t, y1, sprintf('Trip %d', k), ...
-        'HorizontalAlignment','center','VerticalAlignment','bottom', ...
-        'FontWeight','bold','Color','k');
-    text(mid_t, y2, sprintf('ΔSoC=%.2f%%', deltaSoc(k)), ...
-        'HorizontalAlignment','center','VerticalAlignment','bottom', ...
-        'FontSize',8,'Color',[0.1 0.1 0.1]);
-    text(mid_t, y3, sprintf('Dur=%.0f s', duration(k)), ...
-        'HorizontalAlignment','center','VerticalAlignment','bottom', ...
-        'FontSize',8,'Color',[0.1 0.1 0.1]);
-    text(mid_t, y4, sprintf('Range %.2f–%.2f%%', socEnd(k), socStart(k)), ...
-        'HorizontalAlignment','center','VerticalAlignment','bottom', ...
-        'FontSize',8,'Color',[0.1 0.1 0.1]);
-    text(mid_t, y5, sprintf('ΔI=%.2f A', deltaI(k)), ...
-        'HorizontalAlignment','center','VerticalAlignment','bottom', ...
-        'FontSize',8,'Color',[0.1 0.1 0.1]);
+    % 콘솔 출력
+    fprintf('Trip %2d : ΔSoC=%.2f%%, Dur=%.0f s, Range=%.2f–%.2f%%, ΔI=%.2f A\n', ...
+        k, deltaSoc(k), duration(k), socStart(k), socEnd(k), deltaI(k));
 end
+
+%% 12) PreParseResults 및 온도 데이터 저장 -------------------------------
+outputDir = fullfile(basePath, sprintf('Folder%d', folderNum));
+if ~exist(outputDir,'dir'), mkdir(outputDir); end
+
+% PreParseResults 생성·저장
+PreParseResults = struct('DrivingNum',folderNum);
+for k = 1:numTrips
+    idx = startIdxs(k):endIdxs(k);
+    PreParseResults.(sprintf('Trip%d',k)) = [V(idx), I(idx), tCurr(idx)];
+end
+save(fullfile(outputDir, sprintf('PreParseResults%d.mat', folderNum)), 'PreParseResults');
+
+% 온도 데이터 저장
+TempData = struct('timeTemp',tTemp,'temp',temp);
+save(fullfile(outputDir, sprintf('TempData%d.mat', folderNum)), 'TempData');
 
 %% 13) 조건 통과 Trip만 → ParseResults 구조체 생성/저장 --------------------
-% (a) 조건 필터링
-isCand   = (duration >= 1000)             & ...
-           (deltaSoc  < 10)               & ...
-           (min([socStart,socEnd],[],2) >= 20) & ...
-           (deltaI    >= 100);
+
+isCand = (duration>=1000) & (deltaSoc<10) & (min(cat(2,socStart,socEnd),[],2)>=20) & (deltaI>=100);
 candTrips = find(isCand);
 
-% (b) 선택된 Trip 번호 display
-disp(['=== 선택된 Trip 번호: ', num2str(candTrips'), ' ===']);
-
-% (c) ParseResults 생성
-ParseResults            = struct();
-ParseResults.DrivingNum = folderNum;
-for kk = candTrips(:).'
-    idx = startIdxs(kk):endIdxs(kk);
-    ParseResults.(sprintf('Trip%d',kk)) = [V(idx), I(idx), tCurr(idx)];
+ParseResults = struct('DrivingNum',folderNum);
+for k = candTrips'
+    idx = startIdxs(k):endIdxs(k);
+    ParseResults.(sprintf('Trip%d',k)) = [V(idx), I(idx), tCurr(idx)];
 end
-
-% (d) ParseResults 저장
 save(fullfile(outputDir, sprintf('ParseResults%d.mat', folderNum)), 'ParseResults');
 
-
-%% 14) 선택된 Trip 전류·전압 plot (yyaxis 사용) ---------------------------
-for kk = candTrips(:).'
-    idx = startIdxs(kk):endIdxs(kk);
-    t = tCurr(idx);
+%% 14) 조건 통과 Trip I&V plot (yyaxis 사용) -------------------------------
+for k = candTrips'
+    idx = startIdxs(k):endIdxs(k);
+    t    = tCurr(idx);
     Iseg = I(idx);
     Vseg = V(idx);
-    
-    figure('Name', sprintf('Folder %d – Trip %d: I & V', folderNum, kk));
-    
-    yyaxis left
-    plot(t, Iseg, 'LineWidth',1.2);
-    ylabel('Current [A]');
-    
-    yyaxis right
-    plot(t, Vseg, 'LineWidth',1.2);
-    ylabel('Voltage [V]');
-    
-    xlabel('Time [s]');
-    title(sprintf('Folder %d – Trip %d: Current & Voltage vs Time', folderNum, kk));
-    grid on;
+    figure('Name', sprintf('Folder %d – Trip %d: I & V', folderNum, k));
+    yyaxis left;  plot(t, Iseg,'LineWidth',1.2); ylabel('Current [A]');
+    yyaxis right; plot(t, Vseg,'LineWidth',1.2); ylabel('Voltage [V]');
+    xlabel('Time [s]'); title(sprintf('Folder %d – Trip %d: I & V', folderNum, k)); grid on;
 end
