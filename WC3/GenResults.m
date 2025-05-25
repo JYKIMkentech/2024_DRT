@@ -17,6 +17,8 @@ outDir        = 'Figures_PNG';   % PNG 저장 폴더
 Capacity_Ah   = 5;       % 5000 mAh
 Q_batt_As     = Capacity_Ah * 3600;   % 18 000 A·s
 
+basePath = pwd;
+
 %% 0) 저장 폴더 ------------------------------------------------------------
 if ~exist(outDir,'dir'), mkdir(outDir); end
 
@@ -330,39 +332,8 @@ for figIdx=1:nFigs_SOC
         sprintf('Volt_SOC_cycSet_%02d.png',figIdx)),'Resolution',300);
 end
 
-%% 11) 모든 Trip → PreParseResults 구조체 배열 생성/저장 -------------------
-saveDir = fullfile(basePath,'ParseResult');
-if ~exist(saveDir,'dir'), mkdir(saveDir); end
 
-nElem = numTrips + 1;                         % DrivingNum + Trip 개수
-PreParseResults = repmat(struct( ...         % 모든 필드 미리 선언
-    'DrivingNum', [], ...                    % 폴더 번호
-    'TripName',   '', ...                    % 'Trip_#' 텍스트
-    'Data',       []  ...                    % [V I t] 행렬
-), 1, nElem);
-
-% ── (a) element #1 : DrivingNum -----------------------------------------
-PreParseResults(1).DrivingNum = folderNum;
-PreParseResults(1).TripName   = 'DrivingNum';
-
-% ── (b) element #2~N+1 : Trip 데이터 ------------------------------------
-for kk = 1:numTrips
-    idx = startIdxs(kk):endIdxs(kk);
-
-    PreParseResults(kk+1).DrivingNum = [];   % 다른 요소와 field 맞춤
-    PreParseResults(kk+1).TripName   = sprintf('Trip_%d',kk);
-    PreParseResults(kk+1).Data       = [V(idx)  I(idx)  tCurr(idx)];
-end
-
-% ── (c) RefSOC 구조체 ----------------------------------------------------
-RefSOC = struct('timeSOC', tSoC, 'soc', soc);
-
-% ── (d) 저장 -------------------------------------------------------------
-save(fullfile(saveDir,'PreParseResults.mat'),'PreParseResults');
-save(fullfile(saveDir,'RefSOC.mat'),          'RefSOC');
-
-
-%% 12) MAT 저장 ------------------------------------------------------------
+% %% 12) MAT 저장 ------------------------------------------------------------
 saveDir = 'G:\공유 드라이브\Battery Software Lab\Projects\DRT\WC_DRT\PreResults';
 if ~exist(saveDir,'dir'), mkdir(saveDir); end
 save(fullfile(saveDir,'Results.mat'),'Results');
