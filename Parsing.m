@@ -1,7 +1,10 @@
+clear; clc; close all;
 
 %% 1) 데이터 로드
-load('G:\공유 드라이브\BSL_Data4\HNE_agedcell_2025_processed\Driving_parsed\NE_Driving_fresh_4_1.mat');
+load('G:\공유 드라이브\BSL_Data4\HNE_agedcell_2025_processed\Driving_parsed\NE_Driving_fresh_4_1.mat'); % 전체 주행 부하 
 % → parsed_data : 1×352 struct
+
+load('G:\공유 드라이브\BSL_Data4\HNE_agedcell_2025_processed\SIM_parsed\NE_Driving_fresh_4_1_SIM.mat '); % 전체 주행 부하 중 LOAD 만 따로 뺀 데이터
 
 %% 2) 필드별로 세로(행) 방향으로 붙이기
 all_time    = vertcat(parsed_data.time);     %  [∑Ni × 1]  시간
