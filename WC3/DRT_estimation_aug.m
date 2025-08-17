@@ -1,104 +1,98 @@
 function [gamma_est, R0_est, V_est, theta_discrete, W, y, OCV] = ...
-    DRT_estimation_aug(t, ik, V_sd, lambda_hat, n, dt, dur, SOC, soc_values, ocv_values)
-% DRT_estimation_aug estimates the gamma function and voltage using DRT
-% with augmented internal resistance, employing i(k-1) for the RC update.
+    DRT_estimation_aug(t, ik, V_sd, lambda_hat, n, dt, dur, SOC, soc_values, ocv_values, anchorFirstSample)
+% DRT_estimation_aug
+% -------------------------------------------------------------------------
+% • DRT(Distribution of Relaxation Times) 기반 전압 추정 + γ(θ), R0 추정
+% • i(k-1)를 사용해 RC 누적항 z를 ZOH 가정으로 업데이트
+% • J = ||(V - OCV) - [W, i]*[γ; R0]||^2 + λ||[L,0]*[γ;R0]||^2 최소화 (γ>=0, R0>=0)
+% • 요청 2 반영: 첫 샘플에서 측정전압과 추정전압이 정확히 일치하도록 OCV를 앵커링
 %
-% Inputs:
-%   t           - Time vector (length N)
-%   ik          - Current vector (length N)
-%   V_sd        - Measured voltage vector (length N)
-%   lambda_hat  - Regularization parameter (scalar)
-%   n           - Number of RC elements
-%   dt          - Sampling time vector (length N), where dt(k)=t(k)-t(k-1)
-%   dur         - Duration (tau_max) for tau range
-%   SOC         - State of Charge vector (length N)
-%   soc_values  - SOC values from SOC-OCV data
-%   ocv_values  - Corresponding OCV values from SOC-OCV data
+% Inputs
+%   t            : 시간 벡터 (N×1)
+%   ik           : 전류 벡터 (N×1)
+%   V_sd         : 측정 전압 (N×1)
+%   lambda_hat   : 정규화 계수 (스칼라)
+%   n            : RC 이산 격자 개수
+%   dt           : 샘플 간격 벡터 (N×1), dt(k)=t(k)-t(k-1)  (dt(1)은 사용 안 함)
+%   dur          : τ_max [s]
+%   SOC          : SOC 벡터 (N×1) — Trip의 5열
+%   soc_values   : SOC–OCV 테이블의 SOC 열
+%   ocv_values   : SOC–OCV 테이블의 OCV 열
+%   anchorFirstSample (옵션, default=true)
 %
-% Outputs:
-%   gamma_est       - Estimated gamma vector (size n x 1)
-%   R0_est          - Estimated internal resistance (scalar)
-%   V_est           - Estimated voltage vector (length N)
-%   theta_discrete  - Discrete theta values (size n x 1)
-%   W               - Kernel matrix used in estimation (size N x n)
-%   y               - Adjusted measured voltage (V_sd - OCV)
-%   OCV             - Interpolated OCV vector (length N)
+% Outputs
+%   gamma_est       : γ̂ (n×1)
+%   R0_est          : R0̂ (스칼라)
+%   V_est           : 추정 전압 (N×1)
+%   theta_discrete  : θ 격자 (n×1), θ = ln(τ[s])
+%   W               : 커널 행렬 (N×n)
+%   y               : 타깃 (V - OCV) (N×1)
+%   OCV             : (앵커링 반영된) OCV 벡터 (N×1)
 
-    % 1) Calculate OCV using SOC and soc_ocv data
-    OCV = interp1(soc_values, ocv_values, SOC, 'linear', 'extrap');
+    % ---- 옵션 기본값 ----------------------------------------------------
+    if nargin < 11 || isempty(anchorFirstSample)
+        anchorFirstSample = true;
+    end
 
-    % 2) Define theta_discrete, tau_discrete
-    tau_min = 0.1;  % Minimum tau value in seconds (example)
-    tau_max = dur;  % Maximum tau value in seconds
-    theta_min = log(tau_min);
-    theta_max = log(tau_max);
-    theta_discrete = linspace(theta_min, theta_max, n)';  % [n x 1]
-    delta_theta = theta_discrete(2) - theta_discrete(1);
-    tau_discrete = exp(theta_discrete);                  % [n x 1]
+    % ---- 1) OCV: SOC–OCV 테이블 보간 -----------------------------------
+    % 필요 시 SOC를 테이블 범위로 클램핑 (외삽 방지)
+    soc_min = min(soc_values); soc_max = max(soc_values);
+    SOC_for_OCV = min(max(SOC(:), soc_min), soc_max);
+    OCV_lut = interp1(soc_values, ocv_values, SOC_for_OCV, 'linear', 'extrap');
 
-    % 3) Build the W matrix (using i(k-1) for k>=2)
+    % ---- 1-1) 첫 샘플 앵커: OCV(1)=V(1) 되도록 상수 오프셋 --------------
+    if anchorFirstSample
+        delta = V_sd(1) - OCV_lut(1);
+        OCV   = OCV_lut + delta;
+    else
+        OCV   = OCV_lut;
+    end
+
+    % ---- 2) θ, τ 격자 ---------------------------------------------------
+    tau_min        = 0.1;                % [s]
+    tau_max        = dur;                % [s]
+    theta_discrete = linspace(log(tau_min), log(tau_max), n)';  % [n×1]
+    delta_theta    = theta_discrete(2) - theta_discrete(1);
+    tau_discrete   = exp(theta_discrete);                       % [n×1]
+
+    % ---- 3) 커널 행렬 W (i(k-1) 사용, 첫 행 0) -------------------------
     N = length(t);
     W = zeros(N, n);
-    %
-    %  첫 스텝: k_idx=1 에서는 k_idx-1=0이므로 전류 i(0)는 정의되지 않음.
-    %  여기서는 초기값을 0으로 둠.
-    %
-    for k_idx = 1:N
-        if k_idx == 1
-            % Initialize W(1,i) = 0
-            for i = 1:n
-                W(k_idx, i) = 0;
-            end
-        else
-            % Use i(k-1) for the "new input" term
-            for i = 1:n
-                % (dt(k_idx) = t(k_idx)-t(k_idx-1))
-                %  W(k_idx-1, i) = previous step's w value
-                W(k_idx, i) = W(k_idx-1, i) * exp(-dt(k_idx) / tau_discrete(i)) ...
-                    + ik(k_idx-1) * (1 - exp(-dt(k_idx) / tau_discrete(i))) * delta_theta;
-            end
-        end
+    ik = ik(:); V_sd = V_sd(:); dt = dt(:); OCV = OCV(:);
+
+    for k = 2:N
+        a = exp(-dt(k) ./ tau_discrete');                 % 1×n
+        W(k, :) = W(k-1, :) .* a ...
+                + ik(k-1) * (1 - a) * delta_theta;        % 1×n
     end
 
-    % 4) Augment W with the current vector ik (for R0 estimation)
-    %    Note: we still use the current 'ik(k)' (the present sample) for the ohmic drop
-    %    in the final model. Typically that's consistent with V_sd(k) = OCV(k) + i(k)*R0 + ...
-    W_aug = [W, ik(:)];  % [N x (n+1)]
-
-    % 5) Adjust y (measured voltage minus OCV)
-    y = V_sd - OCV;
-    y = y(:);  % ensure column vector
-
-    % 6) Regularization matrix L (first-order difference)
-    L = zeros(n-1, n);
-    for i = 1:n-1
-        L(i, i)   = -1;
-        L(i, i+1) =  1;
+    % ---- 4) 오믹 항 보강: 첫 샘플 0으로 고정해 앵커 유지 ----------------
+    ik_aug = ik;
+    if anchorFirstSample
+        ik_aug(1) = 0;
     end
+    W_aug = [W, ik_aug];                                  % [N×(n+1)]
 
-    % 7) Augment L (no regularization on R0)
-    L_aug = [L, zeros(n-1, 1)];  % [ (n-1) x (n+1) ]
+    % ---- 5) 타깃 y ------------------------------------------------------
+    y = V_sd - OCV;                                       % [N×1]
 
-    % 8) Set up the quadratic programming problem
-    %    Minimizing J = ||y - W_aug * params||^2 + lambda_hat * ||L_aug*params||^2
-    %    => H = 2(W_aug'W_aug + lambda_hat L_aug'L_aug), f = -2 W_aug'y
+    % ---- 6) 정규화 행렬 L (1차 차분), R0에는 정규화 X -------------------
+    I_n = eye(n);
+    L   = I_n(2:end,:) - I_n(1:end-1,:);
+    L_aug = [L, zeros(n-1,1)];                            % [(n-1)×(n+1)]
+
+    % ---- 7) QP 설정 -----------------------------------------------------
     H = 2 * (W_aug' * W_aug + lambda_hat * (L_aug' * L_aug));
-    f = -2 * W_aug' * y;
-
-    % 9) Inequality constraints: params >= 0  (gamma_i >= 0, R0 >= 0)
+    f = -2 * (W_aug' * y);
     A_ineq = -eye(n+1);
-    b_ineq = zeros(n+1, 1);
+    b_ineq = zeros(n+1,1);
 
-    % 10) Solve the quadratic programming problem
-    options = optimoptions('quadprog', 'Display', 'off');
-    params = quadprog(H, f, A_ineq, b_ineq, [], [], [], [], [], options);
+    options = optimoptions('quadprog','Display','off');
+    params  = quadprog(H, f, A_ineq, b_ineq, [], [], [], [], [], options);
 
-    % 11) Extract gamma_est, R0_est
-    gamma_est = params(1:end-1);  % [n x 1]
-    R0_est = params(end);
-
-    % 12) Compute the estimated voltage
-    %     V_est(k) = OCV(k) + W_aug(k,:) * params
-    V_est = OCV + W_aug * params;
-
+    % ---- 8) 결과 --------------------------------------------------------
+    gamma_est = params(1:end-1);
+    R0_est    = params(end);
+    V_est     = OCV + W_aug * params;                     % 추정 전압
 end
+
